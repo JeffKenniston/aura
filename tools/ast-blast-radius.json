@@ -1,0 +1,7 @@
+{
+  "name": "ast-blast-radius",
+  "executionEnvironment": "wasm-wasi-0.3",
+  "category": "static-analysis",
+  "description": "Recursive Common Table Expression dependency analysis against SQLite knowledge graph",
+  "isolation": "wasm-memory-isolation"
+}

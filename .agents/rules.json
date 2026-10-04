@@ -1,0 +1,12 @@
+{
+  "version": "2.0",
+  "scanPaths": [
+    ".agents/rules",
+    ".agents/rules/**/*.md"
+  ],
+  "recursive": true,
+  "enforceFrontmatter": true,
+  "fallbackPaths": [
+    "~/.gemini/config/rules"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "computer",
+  "executionEnvironment": "firecracker-microvm",
+  "category": "gui-automation",
+  "description": "Headless graphical environment executing visual IDE tests and desktop operations",
+  "display": ":99",
+  "isolation": "jailer-cgroup-seccomp"
+}

@@ -1,0 +1,76 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "wasi-run",
+      "args": [
+        "tools/filesystem.wasm",
+        "--path-prefix",
+        "."
+      ],
+      "env": {
+        "AURA_SANDBOX_TYPE": "wasm",
+        "WASI_VERSION": "0.3"
+      }
+    },
+    "ast-blast-radius": {
+      "command": "wasi-run",
+      "args": [
+        "tools/ast_blast_radius.wasm",
+        "--db",
+        ".agents/knowledge_graph.sqlite"
+      ],
+      "env": {
+        "AURA_TOOL": "ast-blast-radius"
+      }
+    },
+    "bash-sandbox": {
+      "command": "aura-jailer",
+      "args": [
+        "--tool",
+        "bash",
+        "--exec-engine",
+        "firecracker",
+        "--kvm-path",
+        "/dev/kvm"
+      ],
+      "env": {
+        "AURA_MICROVM_TIMEOUT_MS": "125000",
+        "AURA_SECCOMP_PROFILE": "strict-dev"
+      }
+    },
+    "browser-sandbox": {
+      "command": "aura-jailer",
+      "args": [
+        "--tool",
+        "browser",
+        "--headless-chromium"
+      ],
+      "env": {
+        "AURA_EXEC_ENGINE": "firecracker"
+      }
+    },
+    "computer-sandbox": {
+      "command": "aura-jailer",
+      "args": [
+        "--tool",
+        "computer",
+        "--display",
+        ":99"
+      ]
+    },
+    "ephemeral-tunnel": {
+      "command": "wasi-run",
+      "args": [
+        "tools/ephemeral_tunnel.wasm",
+        "--spire-socket",
+        "/run/spire/sockets/agent.sock"
+      ]
+    },
+    "spire-attestation": {
+      "serverUrl": "https://spire.aura.local:8443/mcp/v1"
+    },
+    "zenoh-event-bus": {
+      "serverUrl": "https://router.zenoh.aura.local:7447/mcp/v1"
+    }
+  }
+}

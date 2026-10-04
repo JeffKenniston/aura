@@ -1,0 +1,16 @@
+{
+  "watchPaths": [
+    "aura-core",
+    "aura-sdk",
+    "aura-cli",
+    "tools"
+  ],
+  "ignoredPatterns": [
+    "target/**",
+    "**/*.pyc",
+    "**/__pycache__/**"
+  ],
+  "merkleHasher": "blake3",
+  "concurrency": "rayon-auto",
+  "database": ".agents/knowledge_graph.sqlite"
+}

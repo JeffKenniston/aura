@@ -1,0 +1,7 @@
+{
+  "name": "ephemeral-tunnel",
+  "executionEnvironment": "wasm-wasi-0.3",
+  "category": "security-credentials",
+  "description": "Interfaces with SPIRE server to mint short-lived dynamically authenticated credentials",
+  "isolation": "wasm-memory-isolation"
+}

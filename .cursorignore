@@ -1,0 +1,31 @@
+# Cursor Context Hygiene Ignore Rules for Aura Development
+
+# Rust build outputs
+target/
+*.rlib
+
+# Python environments and caches
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# MicroVM and Firecracker disk images
+rootfs/
+*.img
+*.ext4
+*.raw
+*.microvm
+*.sock
+
+# Databases & logs
+*.sqlite
+*.sqlite-wal
+*.log

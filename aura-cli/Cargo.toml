@@ -1,0 +1,12 @@
+[package]
+name = "aura-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+aura-core = { path = "../aura-core" }
+tokio = { workspace = true }
+zenoh = { workspace = true }
+clap = { version = "4.5", features = ["derive"] }

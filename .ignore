@@ -1,0 +1,48 @@
+# Context Hygiene Ignore Rules for Antigravity & Aura Development
+
+# Rust build artifacts
+target/
+**/*.rs.bk
+*.rlib
+
+# Python cache and virtual environments
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# MicroVM, Kernel & Jailer artifacts
+rootfs/
+*.img
+*.ext4
+*.raw
+*.microvm
+firecracker.log
+jailer.log
+*.sock
+
+# Knowledge graph and databases
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+
+# Node & package manager directories
+node_modules/
+.npm/
+
+# Logs and runtime diagnostics
+*.log
+.agents/audit.log
+
+# OS & Editor
+.DS_Store
+Thumbs.db

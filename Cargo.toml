@@ -1,0 +1,23 @@
+[workspace]
+members = [
+    "aura-core",
+    "aura-cli"
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Jeff Kenniston"]
+license = "Apache-2.0"
+
+[workspace.dependencies]
+tokio = { version = "1.38", features = ["full"] }
+wasmtime = "22.0"
+cranelift = "0.109"
+tokio-quiche = "0.2"
+tree-sitter = "0.22"
+rayon = "1.10"
+rusqlite = { version = "0.31", features = ["bundled"] }
+zenoh = "0.11"
+blake3 = "1.5"

@@ -1,0 +1,8 @@
+{
+  "name": "bash",
+  "executionEnvironment": "firecracker-microvm",
+  "category": "terminal-execution",
+  "description": "Ephemeral shell execution environment destroyed immediately post-execution",
+  "timeoutMs": 125000,
+  "isolation": "jailer-strict-kvm"
+}

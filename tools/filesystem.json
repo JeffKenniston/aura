@@ -1,0 +1,7 @@
+{
+  "name": "filesystem",
+  "executionEnvironment": "wasm-wasi-0.3",
+  "category": "io",
+  "description": "Path-prefix restricted filesystem operations hosted in wasmtime with fuel-metering",
+  "isolation": "wasm-memory-isolation"
+}

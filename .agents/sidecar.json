@@ -1,0 +1,64 @@
+{
+  "version": "2.0",
+  "profiles": {
+    "zenoh-router": {
+      "command": "zenohd",
+      "args": [
+        "--config",
+        ".agents/sidecars/zenoh.json5"
+      ],
+      "autostart": true,
+      "healthCheck": {
+        "type": "tcp",
+        "port": 7447,
+        "intervalMs": 2000
+      }
+    },
+    "spire-agent": {
+      "command": "spire-agent",
+      "args": [
+        "run",
+        "-config",
+        ".agents/sidecars/spire-agent.conf"
+      ],
+      "autostart": true,
+      "healthCheck": {
+        "type": "socket",
+        "path": "/run/spire/sockets/agent.sock",
+        "intervalMs": 1500
+      }
+    },
+    "cst-index-watcher": {
+      "command": "aura-cst-watcher",
+      "args": [
+        "--watch",
+        ".",
+        "--db",
+        ".agents/knowledge_graph.sqlite"
+      ],
+      "autostart": true,
+      "description": "Background Merkle tree indexing daemon updating SQLite knowledge graph on file modifications"
+    },
+    "token-shadow-tracker": {
+      "command": "aura-token-tracker",
+      "args": [
+        "--max-cache-tokens",
+        "1000000",
+        "--warning-threshold",
+        "0.85"
+      ],
+      "autostart": true,
+      "description": "Monitors Gemini Interactions API token saturation to trigger context compression"
+    },
+    "microvm-janitor": {
+      "command": "aura-janitor",
+      "args": [
+        "--interval",
+        "10s",
+        "--cleanup-stale-cgroups"
+      ],
+      "autostart": true,
+      "description": "Cleans up ephemeral Firecracker jailer cgroups, veth taps, and orphaned processes"
+    }
+  }
+}

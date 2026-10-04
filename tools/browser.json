@@ -1,0 +1,7 @@
+{
+  "name": "browser",
+  "executionEnvironment": "firecracker-microvm",
+  "category": "web-automation",
+  "description": "Headless Chromium instance controlled via Chrome DevTools Protocol (CDP)",
+  "isolation": "jailer-cgroup-seccomp"
+}

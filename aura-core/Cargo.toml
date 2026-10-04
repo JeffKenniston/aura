@@ -1,0 +1,17 @@
+[package]
+name = "aura-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+wasmtime = { workspace = true }
+cranelift = { workspace = true }
+tokio-quiche = { workspace = true }
+tree-sitter = { workspace = true }
+rayon = { workspace = true }
+rusqlite = { workspace = true }
+zenoh = { workspace = true }
+blake3 = { workspace = true }
