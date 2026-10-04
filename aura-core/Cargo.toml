@@ -8,10 +8,17 @@ license.workspace = true
 [dependencies]
 tokio = { workspace = true }
 wasmtime = { workspace = true }
+wasmtime-wasi = { workspace = true }
 cranelift = { workspace = true }
 tokio-quiche = { workspace = true }
+spiffe = { workspace = true }
 tree-sitter = { workspace = true }
 rayon = { workspace = true }
 rusqlite = { workspace = true }
 zenoh = { workspace = true }
 blake3 = { workspace = true }
+flume = "0.11"
+quiche = "0.30.0"
+
+[dev-dependencies]
+wat = "1.261.0"

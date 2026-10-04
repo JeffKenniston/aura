@@ -14,8 +14,10 @@ license = "Apache-2.0"
 [workspace.dependencies]
 tokio = { version = "1.38", features = ["full"] }
 wasmtime = "22.0"
+wasmtime-wasi = "22.0"
 cranelift = "0.109"
 tokio-quiche = "0.2"
+spiffe = { version = "0.16", features = ["workload-api-x509"] }
 tree-sitter = "0.22"
 rayon = "1.10"
 rusqlite = { version = "0.31", features = ["bundled"] }

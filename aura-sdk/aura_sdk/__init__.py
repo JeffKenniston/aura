@@ -1,0 +1,3 @@
+"""
+Aura Cognitive Orchestration Substrate
+"""

@@ -73,3 +73,9 @@ Before any architectural change, refactoring, or implementation is applied, the 
 - **SVID**: SPIFFE Verifiable Identity Document used for mutual zero-trust authentication between system components.
 - **Interactions API**: Gemini server-side stateful session API with server-sent event (SSE) streaming and background execution.
 - **AST Blast-Radius**: CTE-based dependency evaluation mechanism measuring systemic risk of code modifications.
+
+---
+
+## 5. WSL Sudo Password
+
+- **Password**: "1029123"
