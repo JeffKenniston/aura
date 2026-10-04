@@ -76,6 +76,8 @@ Before any architectural change, refactoring, or implementation is applied, the 
 
 ---
 
-## 5. WSL Sudo Password
+## 5. Secrets
 
-- **Password**: "1029123"
+- **WSL Sudo Password**: "1029123"
+- **Test Gemini API Key**: "test"
+- **Gemini API Key**: "AQ.Ab8RN6KU2wtuwJ_VrXildckkNUFvdnBeOdx34CHa_Bqk9okTjQ"

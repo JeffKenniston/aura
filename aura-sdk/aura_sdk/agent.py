@@ -1,5 +1,6 @@
 from google import genai
 from google.genai import types
+import json
 
 from .transport import ZenohClient
 from .router import route_cognitive_demand
@@ -13,15 +14,51 @@ class Agent:
         self.client = genai.Client()
         self.file_search_store_name = file_search_store_name
         self.previous_interaction_id = None
+        self.compression_required = False
         
     async def boot(self):
         await self.transport.connect()
+        
+        def on_compress(sample):
+            try:
+                payload = json.loads(sample.payload.decode("utf-8"))
+                if payload.get("action") == "compress":
+                    print(f"[{self.name}] CRITICAL: Cognitive Cache Saturation warning received! Flagging for compression.")
+                    self.compression_required = True
+            except Exception as e:
+                pass
+                
+        self.transport.subscribe("control/session/compress", on_compress)
         
     async def execute_task(self, prompt: str):
         """
         Implements multi-tier routing with Gemini Interactions API,
         SSE streaming, and tool execution interception.
         """
+        
+        if self.compression_required and self.previous_interaction_id:
+            print(f"[{self.name}] COMPRESSING CONTEXT before executing task...")
+            # Summarize existing context
+            summary_prompt = "System Context Compression: Summarize the entire conversation history, architectural decisions, and current state into a dense context document."
+            summary_kwargs = {
+                "input": summary_prompt,
+                "model": "gemini-3.5-flash-lite", # use cheap tier for summarization
+                "previous_interaction_id": self.previous_interaction_id,
+                "stream": True
+            }
+            summary_text = ""
+            summary_stream = await self.client.aio.interactions.create(**summary_kwargs)
+            async for ev in summary_stream:
+                if ev.event_type == "step.delta" and ev.delta.type == "text":
+                    summary_text += ev.delta.text
+            
+            print(f"[{self.name}] Resetting context with compressed summary.")
+            self.previous_interaction_id = None
+            self.compression_required = False
+            
+            # Prepend summary to the prompt
+            prompt = f"Previous context summary: {summary_text}\n\nNext instruction: {prompt}"
+
         print(f"[{self.name}] READ: Received task -> {prompt}")
         
         # Multi-Tier Dynamic Routing
@@ -117,9 +154,31 @@ class Agent:
                                 print(f"\033[90m[Thought]: {new_event.delta.text}\033[0m\n", end="", flush=True)
                         elif new_event.event_type == "interaction.completed":
                             print(f"\n[{self.name}] Finished processing task.")
+                            
+                            # Emit Telemetry
+                            if hasattr(new_event.interaction, 'usage') and new_event.interaction.usage:
+                                total_tokens = getattr(new_event.interaction.usage, 'total_tokens', 0)
+                                if total_tokens > 0:
+                                    metric = {
+                                        "agent": self.name,
+                                        "session_id": self.previous_interaction_id or "",
+                                        "total_tokens": total_tokens
+                                    }
+                                    self.transport.publish("tasks/metrics/tokens", json.dumps(metric))
                     
             elif event.event_type == "interaction.completed":
                 print(f"\n[{self.name}] Finished processing task.")
+                
+                # Emit Telemetry
+                if hasattr(event.interaction, 'usage') and event.interaction.usage:
+                    total_tokens = getattr(event.interaction.usage, 'total_tokens', 0)
+                    if total_tokens > 0:
+                        metric = {
+                            "agent": self.name,
+                            "session_id": self.previous_interaction_id or "",
+                            "total_tokens": total_tokens
+                        }
+                        self.transport.publish("tasks/metrics/tokens", json.dumps(metric))
                 
         return final_output
         

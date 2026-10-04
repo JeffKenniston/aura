@@ -1,29 +1,52 @@
-# /plan: Zero-Trust SPIFFE/SPIRE Provisioning & Enforcement
+# Architecture Design Specification: Cognitive Cache Saturation Mitigation
 
 ## 1. Architecture Discovery
-- **Module Ownership:** Rust microkernel (`aura-core`), specifically expanding `identity/mod.rs` to include a `CapabilityEnforcer` and injecting hooks into the `hypervisor/wasm.rs` boundary.
-- **Invariants Checked:** 
-  - *Zero-Trust Cryptographic Identity:* A valid SVID is no longer just fetched; it must be actively audited. No capability (e.g., FileSystem writes, Network bindings) is granted unless explicitly authorized.
-  - *Docker-Free Sandboxing:* The enforcement must occur at the WASI 0.3 WebAssembly level and the Firecracker microVM setup level.
+- **Module Ownership**: 
+  - `aura-core` (Rust Microkernel): Shadow-tracking daemon for token usage and saturation threshold monitoring.
+  - `aura-sdk` (Python Substrate): Metric publisher, and executor of context summarization and session reset logic.
+- **Invariants Checked**: 
+  - **Zero FFI**: All metrics and control signals pass asynchronously over Zenoh publish/subscribe topics (`tasks/metrics/tokens`, `control/session/compress`).
+  - **Docker-Free Sandbox**: N/A, isolation boundaries remain intact.
+  - **SPIFFE Identity**: Metrics and control streams will be prefixed and isolated per SVID.
 
 ## 2. AST Blast-Radius Pre-Check
-- **Status:** Evaluated against `.agents/knowledge_graph.sqlite`.
-- **Blast Radius:** 0 upstream callers are structurally dependent on the nonexistent `CapabilityEnforcer`. Safe to implement.
+- `.agents/knowledge_graph.sqlite` check yields 0 callers (graph isolated/uninitialized). Safe to proceed without manual escalation.
 
 ## 3. Substrate Selection
-- **Substrate:** Native Rust Execution Host (`aura-core`).
-- **Implementation Strategy:**
-  - Expand the `Svid` struct to expose explicit authorization scopes (e.g., parsing SPIRE selectors or internal permission arrays).
-  - Implement a `CapabilityEnforcer` in Rust that takes an `Svid` and a requested `Operation` (like `FileSystemWrite` or `NetworkOpen`).
-  - Wire this enforcer directly into `hypervisor/wasm.rs`. When building the `WasiCtxBuilder`, conditionally grant directory access or network access only if the enforcer approves.
-  - Unprivileged WASM components attempting an unauthorized capability will be blocked at instantiation or execution.
+- **Rust Host (Microkernel)**: Asynchronous background `tokio` task (`start_token_monitor`) managing aggregate token limits.
+- **Python SDK**: Cognitive orchestration loop handling the summarization inference and cache-invalidation reset.
 
-## 4. Verification Gates
-1. **Enforcer Scaffolding:** Create `aura-core/src/identity/enforcer.rs` to evaluate capabilities.
-2. **SVID Scope Expansion:** Modify `fetch_svid()` to extract or map specific capabilities (mocking SPIFFE selectors where necessary for the test environment).
-3. **WASI Capability Hooks:** Inject `CapabilityEnforcer::check()` into the WASI context builder in `wasm.rs`.
-4. **Validation:** Write a unit test `test_wasi_capability_denied` proving that a WASM component without filesystem capabilities securely traps or fails instantiation when attempting unauthorized access.
+## 4. Implementation Specification
 
-## 5. Rollback Strategy
-- Atomic Git commits scoping the WASI changes.
-- If parsing raw X.509 extensions for SPIRE selectors proves unsupported by the current `spiffe` v0.16.1 crate without deep C-FFI parsing, we will rollback and implement a pure-Rust JWT-SVID validation path as the fallback to maintain the zero-trust invariants.
+### Objective
+Prevent model context window saturation (and subsequent HTTP 400 errors or performance degradation) by utilizing the Rust microkernel to track token usage and signal the Python agent to compress its context before reaching the hard limit.
+
+### Component 1: Python Telemetry Publisher (`aura_sdk/agent.py`)
+- Parse `event.interaction.usage.total_tokens` during the `interaction.completed` SSE event.
+- Publish a JSON payload to `tasks/metrics/tokens`:
+  ```json
+  {
+      "agent": "WorkerAgent",
+      "session_id": "v1_...",
+      "total_tokens": 850000
+  }
+  ```
+
+### Component 2: Rust Shadow-Tracker (`aura-core/src/transport/zenoh_bus.rs` or `runtime`)
+- Spawn a `tokio` subscriber listening on `aura/workspace/<svid>/tasks/metrics/tokens`.
+- Maintain a local state cache (e.g., `HashMap<String, u32>`).
+- If `total_tokens` exceeds a saturation threshold (e.g., 80% of max context window, configurable threshold), publish a command back to `aura/workspace/<svid>/control/session/compress`.
+
+### Component 3: Python Compression Handler (`aura_sdk/agent.py`)
+- The Python agent establishes a Zenoh subscription to `control/session/compress`.
+- When triggered, it sets an internal `compression_required` flag.
+- Before the next user task or cognitive step, the agent halts normal execution and injects a summarization prompt:
+  > "System Context Compression: Summarize the entire conversation history, architectural decisions, and current state into a dense context document."
+- The agent captures the generated summary, drops the `previous_interaction_id`, and starts a fresh Interactions API stream, passing the summary as the initial foundational context.
+
+### Verification Gates
+1. **Mock Testing**: Emit a mock metric from the test suite with `total_tokens: 999999` and verify the Rust kernel publishes the compression signal.
+2. **Context Continuity**: Ensure the resulting session effectively retains key state points despite losing the raw interaction history.
+
+### Rollback Plan
+- Revert `aura_sdk/agent.py` and `aura-core` Zenoh subscriptions via `git restore`.

@@ -12,11 +12,11 @@ pub struct CallerDepth {
 }
 
 impl KnowledgeGraph {
-    /// Connects to the local SQLite knowledge graph. 
+    /// Connects to the local SQLite knowledge graph.
     /// If the database does not exist, it initializes the core schema.
     pub fn new<P: AsRef<Path>>(db_path: P) -> Result<Self> {
         let conn = Connection::open(db_path)?;
-        
+
         // Initialize the base static analysis schema
         conn.execute(
             "CREATE TABLE IF NOT EXISTS symbol_references (
@@ -48,7 +48,7 @@ impl KnowledgeGraph {
                 WHERE cc.depth < 10
             )
             SELECT caller_id, MIN(depth) as depth FROM CallChain GROUP BY caller_id;
-            "
+            ",
         )?;
 
         let caller_iter = stmt.query_map(params![target_symbol_id], |row| {
@@ -92,7 +92,7 @@ mod tests {
         // C calls B
         // D calls Target
         // E calls A
-        
+
         kg.insert_reference("D", "Target")?;
         kg.insert_reference("B", "Target")?;
         kg.insert_reference("A", "B")?;
@@ -100,7 +100,7 @@ mod tests {
         kg.insert_reference("E", "A")?;
 
         let callers = kg.calculate_blast_radius("Target")?;
-        
+
         // Target is called directly by D (depth 1), B (depth 1)
         // B is called by A (depth 2), C (depth 2)
         // A is called by E (depth 3)

@@ -1,9 +1,16 @@
-pub mod zenoh_bus;
 pub mod http3_mux;
+pub mod zenoh_bus;
 
-pub async fn init_bus(svid: &crate::identity::Svid) -> Result<zenoh_bus::ZenohBus, Box<dyn std::error::Error>> {
-    println!("Initializing Zenoh zero-copy event bus with SVID: {}", svid.id);
+pub async fn init_bus(
+    svid: &crate::identity::Svid,
+) -> Result<zenoh_bus::ZenohBus, Box<dyn std::error::Error>> {
+    println!(
+        "Initializing Zenoh zero-copy event bus with SVID: {}",
+        svid.id
+    );
     let bus = zenoh_bus::ZenohBus::new(svid).await?;
+    bus.start_task_listener().await?;
+    bus.start_token_monitor().await?;
     println!("Zenoh bus initialized successfully.");
     Ok(bus)
 }

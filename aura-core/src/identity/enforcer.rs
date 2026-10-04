@@ -29,7 +29,8 @@ impl CapabilityEnforcer {
             Err(format!(
                 "Zero-Trust Violation: SVID {} is not authorized for capability '{}'",
                 svid.id, req_scope
-            ).into())
+            )
+            .into())
         }
     }
 }

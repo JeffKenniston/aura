@@ -1,7 +1,9 @@
 import asyncio
 import json
 import uuid
+
 import zenoh
+
 
 class ZenohClient:
     """
@@ -48,7 +50,7 @@ class ZenohClient:
                 future = self._pending_futures[task_id]
                 # Zenoh callbacks execute in a background thread. Must use call_soon_threadsafe.
                 self._loop.call_soon_threadsafe(future.set_result, result)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"Failed to process completion callback: {e}")
 
     def publish(self, sub_topic: str, payload: str):
@@ -83,7 +85,9 @@ class ZenohClient:
         if not self.session:
             raise RuntimeError("Zenoh session is not connected.")
         full_topic = f"{self.prefix}/{sub_topic}"
-        return self.session.declare_subscriber(full_topic, callback)
+        sub = self.session.declare_subscriber(full_topic, callback)
+        self._subscribers.append(sub)
+        return sub
 
     def close(self):
         for sub in self._subscribers:
