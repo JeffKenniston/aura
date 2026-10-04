@@ -10,3 +10,6 @@ aura-core = { path = "../aura-core" }
 tokio = { workspace = true }
 zenoh = { workspace = true }
 clap = { version = "4.5", features = ["derive"] }
+spiffe.workspace = true
+spiffe-rustls-tokio = "0.4.0"
+cedar-policy = "4.13.0"
