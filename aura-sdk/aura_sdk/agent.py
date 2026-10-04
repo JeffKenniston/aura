@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 from google import genai
@@ -180,7 +181,58 @@ class Agent:
                         }
                         self.transport.publish("tasks/metrics/tokens", json.dumps(metric))
                 
-        return final_output
+    async def execute_background_task(self, prompt: str):
+        """
+        Executes a long-horizon task autonomously in the cloud via background=True.
+        Subscribes to Zenoh webhook bridge for completion notifications to avoid polling.
+        """
+        print(f"[{self.name}] BACKGROUND READ: Received long-horizon task -> {prompt}")
         
+        route_config = route_cognitive_demand(prompt)
+        
+        kwargs = {
+            "input": prompt,
+            "background": True,
+        }
+        kwargs.update(route_config)
+        if self.previous_interaction_id:
+            kwargs["previous_interaction_id"] = self.previous_interaction_id
+            
+        print(f"[{self.name}] Calling interactions.create with background=True...")
+        interaction = await self.client.aio.interactions.create(**kwargs)
+        self.previous_interaction_id = interaction.id
+        print(f"[{self.name}] Session ID: {self.previous_interaction_id}. Yielding to OS...")
+
+        # Subscribe to Zenoh for status completion
+        future = asyncio.get_running_loop().create_future()
+        
+        def on_status_update(sample):
+            try:
+                payload_str = sample.payload.decode("utf-8")
+                data = json.loads(payload_str)
+                status = data.get("status")
+                print(f"[{self.name}] BACKGROUND STATUS UPDATE: {status}")
+                if status in ("completed", "failed", "requires_action"):
+                    asyncio.get_running_loop().call_soon_threadsafe(future.set_result, status)
+            except Exception as e:
+                print(f"Failed to process status update: {e}")
+                
+        # The topic published by rust is `interactions/{interaction_id}/status`
+        sub_topic = f"interactions/{self.previous_interaction_id}/status"
+        sub = self.transport.subscribe(sub_topic, on_status_update)
+        
+        # Suspend agent until Zenoh bridge sends terminal state
+        final_status = await future
+        
+        # Unsubscribe
+        # In Zenoh 1.0/0.11 python API, undeclare() removes the subscription
+        sub.undeclare()
+        
+        # Fetch the completed interaction
+        print(f"[{self.name}] Resuming execution and fetching final interaction state.")
+        completed_interaction = await self.client.aio.interactions.get(self.previous_interaction_id)
+        
+        return f"Interaction finished with status: {final_status}"
+
     def shutdown(self):
         self.transport.close()
