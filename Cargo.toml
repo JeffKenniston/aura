@@ -18,8 +18,9 @@ wasmtime-wasi = "22.0"
 cranelift = "0.109"
 tokio-quiche = "0.2"
 spiffe = { version = "0.16", features = ["workload-api-x509"] }
-tree-sitter = "0.22"
+tree-sitter = "0.25"
 rayon = "1.10"
 rusqlite = { version = "0.31", features = ["bundled"] }
 zenoh = "0.11"
 blake3 = "1.5"
+ignore = "0.4"
