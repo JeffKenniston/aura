@@ -1,10 +1,9 @@
-use std::path::{Path, PathBuf};
-use rayon::prelude::*;
-use ignore::WalkBuilder;
-use std::fs;
-use tree_sitter::Parser;
 use crate::knowledge::KnowledgeGraph;
-
+use ignore::WalkBuilder;
+use rayon::prelude::*;
+use std::fs;
+use std::path::{Path, PathBuf};
+use tree_sitter::Parser;
 
 pub struct Indexer<'a> {
     kg: &'a KnowledgeGraph,
@@ -22,7 +21,7 @@ impl<'a> Indexer<'a> {
             .hidden(true)
             .git_ignore(true)
             .build();
-            
+
         let files: Vec<PathBuf> = walker
             .filter_map(|entry| entry.ok())
             .filter(|entry| entry.file_type().map_or(false, |ft| ft.is_file()))
@@ -30,41 +29,43 @@ impl<'a> Indexer<'a> {
             .collect();
 
         // 1. Rayon parallel iteration to compute BLAKE3 hashes
-        let hashed_files: Vec<_> = files.into_par_iter().filter_map(|path| {
-            if let Ok(content) = fs::read(&path) {
-                let mut hasher = blake3::Hasher::new();
-                hasher.update(&content);
-                let current_hash = hasher.finalize().to_hex().to_string();
-                Some((path, content, current_hash))
-            } else {
-                None
-            }
-        }).collect();
+        let hashed_files: Vec<_> = files
+            .into_par_iter()
+            .filter_map(|path| {
+                if let Ok(content) = fs::read(&path) {
+                    let mut hasher = blake3::Hasher::new();
+                    hasher.update(&content);
+                    let current_hash = hasher.finalize().to_hex().to_string();
+                    Some((path, content, current_hash))
+                } else {
+                    None
+                }
+            })
+            .collect();
 
         // 2. Synchronous iteration for SQLite updates and CST extraction
         for (path, content, current_hash) in hashed_files {
             let path_str = path.to_string_lossy().to_string();
-            
+
             let needs_update = match self.kg.get_file_hash(&path_str) {
                 Ok(Some(old_hash)) => old_hash != current_hash,
                 Ok(None) => true,
                 Err(_) => false,
             };
-            
+
             if needs_update {
                 // Update cache
                 let _ = self.kg.update_file_hash(&path_str, &current_hash);
-                
+
                 // Parse CST (simulated to just test compilation and structure)
                 self.extract_cst(&path, &content);
             }
         }
 
-        
         // Final Global Linking Pass
         let _ = self.kg.link_global_references();
     }
-    
+
     /// Generates concrete syntax trees that preserve inline comments, punctuation, and whitespace.
     fn extract_cst(&self, path: &Path, content: &[u8]) {
         use crate::knowledge::parsers::ParserRegistry;
@@ -89,14 +90,14 @@ mod tests {
     fn test_indexer_hashing_and_caching() {
         let kg = KnowledgeGraph::new(":memory:").unwrap();
         let indexer = Indexer::new(&kg);
-        
+
         let dir = tempdir().unwrap();
         let file_path = dir.path().join("test.rs");
         let mut file = fs::File::create(&file_path).unwrap();
         writeln!(file, "fn main() {{}}").unwrap();
-        
+
         indexer.index_repository(dir.path());
-        
+
         let path_str = file_path.to_string_lossy().to_string();
         let hash = kg.get_file_hash(&path_str).unwrap();
         assert!(hash.is_some(), "File should be hashed and stored in KG");

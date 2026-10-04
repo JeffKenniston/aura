@@ -1,9 +1,9 @@
-from google import genai
-from google.genai import types
 import json
 
-from .transport import ZenohClient
+from google import genai
+
 from .router import route_cognitive_demand
+from .transport import ZenohClient
 
 
 class Agent:
@@ -25,7 +25,7 @@ class Agent:
                 if payload.get("action") == "compress":
                     print(f"[{self.name}] CRITICAL: Cognitive Cache Saturation warning received! Flagging for compression.")
                     self.compression_required = True
-            except Exception as e:
+            except (ValueError, KeyError, TypeError, AttributeError):
                 pass
                 
         self.transport.subscribe("control/session/compress", on_compress)

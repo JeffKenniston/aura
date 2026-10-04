@@ -1,5 +1,6 @@
 from aura_sdk.router import route_cognitive_demand
 
+
 def test_route_deep_research():
     assert route_cognitive_demand("synthesize a market analysis") == {"agent": "deep-research-preview"}
 

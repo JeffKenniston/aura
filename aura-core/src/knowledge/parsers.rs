@@ -1,7 +1,6 @@
-
-use tree_sitter::Language;
 use std::path::Path;
 use streaming_iterator::StreamingIterator;
+use tree_sitter::Language;
 
 pub struct ParserRegistry;
 
@@ -23,9 +22,14 @@ impl ParserRegistry {
         }
     }
 
-    pub fn extract_symbols(kg: &crate::knowledge::KnowledgeGraph, path: &Path, content: &[u8], tree: &tree_sitter::Tree) {
+    pub fn extract_symbols(
+        kg: &crate::knowledge::KnowledgeGraph,
+        path: &Path,
+        content: &[u8],
+        tree: &tree_sitter::Tree,
+    ) {
         let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
-        
+
         let query_str = match ext {
             "rs" => "(function_item name: (identifier) @name) (struct_item name: (type_identifier) @name)",
             "py" => "(function_definition name: (identifier) @name) (class_definition name: (identifier) @name)",
@@ -47,9 +51,17 @@ impl ParserRegistry {
                 while let Some(m) = matches.next() {
                     for cap in m.captures {
                         let node = cap.node;
-                        if let Ok(name) = std::str::from_utf8(&content[node.start_byte()..node.end_byte()]) {
+                        if let Ok(name) =
+                            std::str::from_utf8(&content[node.start_byte()..node.end_byte()])
+                        {
                             let file_path = path.to_string_lossy().to_string();
-                            let _ = kg.insert_local_definition(&file_path, name, "symbol", node.start_byte(), node.end_byte());
+                            let _ = kg.insert_local_definition(
+                                &file_path,
+                                name,
+                                "symbol",
+                                node.start_byte(),
+                                node.end_byte(),
+                            );
                         }
                     }
                 }
@@ -57,7 +69,6 @@ impl ParserRegistry {
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -73,7 +84,10 @@ mod tests {
 
         let files = vec![
             ("main.rs", "fn rust_func() {} struct RustStruct {}"),
-            ("main.py", "def python_func():\n    pass\nclass PythonClass:\n    pass"),
+            (
+                "main.py",
+                "def python_func():\n    pass\nclass PythonClass:\n    pass",
+            ),
             ("main.js", "function js_func() {} class JsClass {}"),
             ("main.ts", "function ts_func() {} class TsClass {}"),
             ("main.go", "func go_func() {} type GoStruct struct {}"),
@@ -87,12 +101,12 @@ mod tests {
         for (name, content) in files {
             let path = dir.path().join(name);
             fs::write(&path, content).unwrap();
-            
+
             if let Some(language) = ParserRegistry::get_language_for_file(&path) {
                 let mut parser = tree_sitter::Parser::new();
                 parser.set_language(&language).unwrap();
                 let tree = parser.parse(content.as_bytes(), None).unwrap();
-                
+
                 ParserRegistry::extract_symbols(&kg, &path, content.as_bytes(), &tree);
             } else {
                 panic!("Language not found for {}", name);
@@ -102,7 +116,10 @@ mod tests {
         // Verify the extracted symbols are in the KG
         // We'll just check if we got roughly the expected number of definitions.
         // There are 19 symbols across the 10 files.
-        let mut stmt = kg.conn.prepare("SELECT symbol_name FROM local_definitions").unwrap();
+        let mut stmt = kg
+            .conn
+            .prepare("SELECT symbol_name FROM local_definitions")
+            .unwrap();
         let mut rows = stmt.query([]).unwrap();
         let mut count = 0;
         while let Some(row) = rows.next().unwrap() {

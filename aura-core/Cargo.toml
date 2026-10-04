@@ -6,6 +6,7 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+uuid = { version = "1.10", features = ["v4"] }
 tokio = { workspace = true }
 wasmtime = { workspace = true }
 wasmtime-wasi = { workspace = true }

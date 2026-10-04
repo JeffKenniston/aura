@@ -1,8 +1,10 @@
-import asyncio
 import json
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+
 from aura_sdk.agent import Agent
+
 
 class FakeEvent:
     def __init__(self, event_type, step=None, delta=None, interaction=None):

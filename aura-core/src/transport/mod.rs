@@ -10,6 +10,7 @@ pub async fn init_bus(
     );
     let bus = zenoh_bus::ZenohBus::new(svid).await?;
     bus.start_task_listener().await?;
+    bus.start_tools_listener().await?;
     bus.start_token_monitor().await?;
     println!("Zenoh bus initialized successfully.");
     Ok(bus)

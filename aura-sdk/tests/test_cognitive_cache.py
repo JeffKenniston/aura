@@ -1,9 +1,9 @@
-import asyncio
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
-from google.genai import types
 from aura_sdk.agent import Agent
+
 
 @pytest.mark.asyncio
 @patch("aura_sdk.agent.genai.Client")

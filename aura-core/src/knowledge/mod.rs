@@ -69,7 +69,14 @@ impl KnowledgeGraph {
 
     /// Three-Pass Resolution:
     /// Pass 1: Local Definition Pass (Identify and store definitions)
-    pub fn insert_local_definition(&self, file_path: &str, symbol_name: &str, symbol_type: &str, start_byte: usize, end_byte: usize) -> Result<()> {
+    pub fn insert_local_definition(
+        &self,
+        file_path: &str,
+        symbol_name: &str,
+        symbol_type: &str,
+        start_byte: usize,
+        end_byte: usize,
+    ) -> Result<()> {
         self.conn.execute(
             "INSERT INTO local_definitions (file_path, symbol_name, symbol_type, start_byte, end_byte) 
              VALUES (?1, ?2, ?3, ?4, ?5) 
@@ -83,11 +90,22 @@ impl KnowledgeGraph {
     }
 
     /// Pass 2: Reference Extraction Pass (Extract imports and bare name invocations)
-    pub fn insert_reference_usage(&self, file_path: &str, reference_name: &str, start_byte: usize, end_byte: usize) -> Result<()> {
+    pub fn insert_reference_usage(
+        &self,
+        file_path: &str,
+        reference_name: &str,
+        start_byte: usize,
+        end_byte: usize,
+    ) -> Result<()> {
         self.conn.execute(
             "INSERT INTO symbol_usages (file_path, reference_name, start_byte, end_byte) 
              VALUES (?1, ?2, ?3, ?4)",
-            params![file_path, reference_name, start_byte as i64, end_byte as i64],
+            params![
+                file_path,
+                reference_name,
+                start_byte as i64,
+                end_byte as i64
+            ],
         )?;
         Ok(())
     }
@@ -99,7 +117,7 @@ impl KnowledgeGraph {
             "SELECT r.file_path, r.reference_name, ld.file_path, ld.symbol_name 
              FROM symbol_usages r 
              JOIN local_definitions ld ON r.reference_name = ld.symbol_name 
-             WHERE r.file_path != ld.file_path"
+             WHERE r.file_path != ld.file_path",
         )?;
 
         let links_iter = stmt.query_map([], |row| {
@@ -107,7 +125,10 @@ impl KnowledgeGraph {
             let reference_name: String = row.get(1)?;
             let callee_file: String = row.get(2)?;
             let symbol_name: String = row.get(3)?;
-            Ok((format!("{}::{}", caller_file, reference_name), format!("{}::{}", callee_file, symbol_name)))
+            Ok((
+                format!("{}::{}", caller_file, reference_name),
+                format!("{}::{}", callee_file, symbol_name),
+            ))
         })?;
 
         let mut linked_count = 0;
@@ -135,7 +156,9 @@ impl KnowledgeGraph {
     }
 
     pub fn get_file_hash(&self, file_path: &str) -> Result<Option<String>> {
-        let mut stmt = self.conn.prepare("SELECT blake3_hash FROM file_hashes WHERE file_path = ?1")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT blake3_hash FROM file_hashes WHERE file_path = ?1")?;
         let mut rows = stmt.query(params![file_path])?;
         if let Some(row) = rows.next()? {
             Ok(Some(row.get(0)?))
@@ -211,7 +234,7 @@ mod tests {
     #[test]
     fn test_three_pass_resolution() -> Result<()> {
         let kg = KnowledgeGraph::new(":memory:")?;
-        
+
         // Pass 1: Local definitions
         kg.insert_local_definition("core.rs", "Engine", "struct", 10, 50)?;
         kg.insert_local_definition("utils.rs", "helper", "function", 10, 50)?;
@@ -228,7 +251,7 @@ mod tests {
         let callers = kg.calculate_blast_radius("core.rs::Engine")?;
         assert_eq!(callers.len(), 1);
         assert_eq!(callers[0].caller_id, "main.rs::Engine");
-        
+
         Ok(())
     }
 }

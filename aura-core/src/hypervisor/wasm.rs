@@ -51,6 +51,10 @@ pub fn create_linker(
     let mut linker = wasmtime::component::Linker::new(engine);
     // Map standard WASI Component Model interfaces asynchronously
     wasmtime_wasi::add_to_linker_async(&mut linker)?;
+
+    // Bind host tools
+    crate::hypervisor::wasm_tools::bind_to_linker(&mut linker)?;
+
     Ok(linker)
 }
 

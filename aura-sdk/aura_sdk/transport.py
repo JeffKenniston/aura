@@ -33,6 +33,11 @@ class ZenohClient:
         sub = self.subscribe(completion_topic, self._on_completion)
         self._subscribers.append(sub)
         
+        # Setup internal subscriber to listen for tool results
+        tool_topic = "tools/result"
+        tool_sub = self.subscribe(tool_topic, self._on_tool_result)
+        self._subscribers.append(tool_sub)
+        
         print(f"[{self.svid}] Successfully connected to Zenoh.")
 
     def _on_completion(self, sample):
@@ -52,6 +57,19 @@ class ZenohClient:
                 self._loop.call_soon_threadsafe(future.set_result, result)
         except Exception as e:  # noqa: BLE001
             print(f"Failed to process completion callback: {e}")
+
+    def _on_tool_result(self, sample):
+        try:
+            payload_str = sample.payload.decode("utf-8")
+            data = json.loads(payload_str)
+            tool_id = data.get("tool_id")
+            result = data.get("result")
+            
+            if tool_id and tool_id in self._pending_futures:
+                future = self._pending_futures[tool_id]
+                self._loop.call_soon_threadsafe(future.set_result, result)
+        except (ValueError, KeyError, TypeError, AttributeError) as e:
+            print(f"Failed to process tool result callback: {e}")
 
     def publish(self, sub_topic: str, payload: str):
         if not self.session:
@@ -79,6 +97,26 @@ class ZenohClient:
         
         # Cleanup
         del self._pending_futures[task_id]
+        return result
+
+    async def dispatch_tool(self, tool_type: str, payload: dict) -> str:
+        """
+        Dispatches a tool execution request.
+        """
+        tool_id = str(uuid.uuid4())
+        req = {
+            "tool_id": tool_id,
+            "tool_type": tool_type,
+            "payload": payload
+        }
+        
+        future = self._loop.create_future()
+        self._pending_futures[tool_id] = future
+        
+        self.publish("tools/execute", json.dumps(req))
+        
+        result = await future
+        del self._pending_futures[tool_id]
         return result
 
     def subscribe(self, sub_topic: str, callback):
