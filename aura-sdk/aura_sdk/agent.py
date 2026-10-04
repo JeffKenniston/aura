@@ -2,6 +2,7 @@ from google import genai
 from google.genai import types
 
 from .transport import ZenohClient
+from .router import route_cognitive_demand
 
 
 class Agent:
@@ -22,6 +23,10 @@ class Agent:
         SSE streaming, and tool execution interception.
         """
         print(f"[{self.name}] READ: Received task -> {prompt}")
+        
+        # Multi-Tier Dynamic Routing
+        route_config = route_cognitive_demand(prompt)
+        print(f"[{self.name}] ROUTE: Assigned to {route_config}")
         
         tools = []
         if self.file_search_store_name:
@@ -46,11 +51,11 @@ class Agent:
         tools.append(sandbox_tool)
             
         kwargs = {
-            "model": "gemini-3.8-flash",
             "input": prompt,
             "stream": True,
             "tools": tools,
         }
+        kwargs.update(route_config)
         if self.previous_interaction_id:
             kwargs["previous_interaction_id"] = self.previous_interaction_id
             
