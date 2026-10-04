@@ -1,4 +1,5 @@
 mod app;
+pub mod security;
 
 use app::{AppModel, Message};
 use crossterm::{
