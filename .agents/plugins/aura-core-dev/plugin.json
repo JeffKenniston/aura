@@ -1,7 +1,7 @@
 {
   "name": "aura-core-dev",
-  "version": "2.0.0",
-  "description": "Antigravity plugin bundle providing Aura architecture rules, tools, and hooks",
+  "version": "2.1.0",
+  "description": "Antigravity plugin bundle providing Aura and Aura CLI architecture rules, tools, and hooks",
   "rules": [
     "01-architecture-invariants.md",
     "02-execution-sandboxes.md",
@@ -9,18 +9,27 @@
     "04-mcp-http3-transport.md",
     "05-gemini-interactions-routing.md",
     "06-semantic-cst-repository.md",
-    "07-guardrails-token-economics.md"
+    "07-guardrails-token-economics.md",
+    "08-aura-cli-tui-tea-architecture.md",
+    "09-zenoh-shm-zero-copy-ipc.md",
+    "10-cedar-progressive-authorization.md",
+    "11-af-vsock-telemetry-streaming.md",
+    "12-cli-qualification-gates.md"
   ],
   "skills": [
     "plan-architecture",
     "ast-blast-radius",
     "spiffe-attestation",
     "sandbox-verification",
-    "circuit-breaker"
+    "circuit-breaker",
+    "cli-qualification-gates",
+    "cedar-policy-verification",
+    "zenoh-shm-benchmarking"
   ],
   "subagents": [
     "orchestrator",
     "architect",
+    "cli-systems-engineer",
     "rust-kernel-engineer",
     "python-scripting-engineer",
     "security-specialist",

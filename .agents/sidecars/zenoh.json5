@@ -12,5 +12,10 @@
     peer: {
       mode: "router"
     }
+  },
+  transport: {
+    shared_memory: {
+      enabled: true
+    }
   }
 }

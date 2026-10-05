@@ -4,19 +4,55 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+description = "Pure Rust terminal user interface and orchestration client for Aura"
+
+[[bin]]
+name = "aura-cli"
+path = "src/main.rs"
 
 [dependencies]
+# Internal workspace crates
 aura-core = { path = "../aura-core" }
+
+# TUI & Terminal Presentation
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+ratatui-image = { workspace = true }
+
+# Async Event Loop (TEA)
 tokio = { workspace = true }
-zenoh = { workspace = true, features = ["unstable"] }
-clap = { version = "4.5", features = ["derive"] }
-ratatui = "0.30.2"
-crossterm = { version = "0.29.0", features = ["event-stream"] }
-miette = { version = "7.6.0", features = ["fancy"] }
-futures = "0.3.34"
-anyhow = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-spiffe.workspace = true
-spiffe-rustls-tokio = "0.4.0"
-cedar-policy = "4.13.0"
+tokio-stream = { workspace = true }
+
+# Zero-Copy Shared Memory IPC
+zenoh = { workspace = true }
+zenoh-shm = { workspace = true }
+
+# Two-Layer Zero-Trust Security
+spiffe = { workspace = true }
+spiffe-rustls-tokio = { workspace = true }
+cedar-policy = { workspace = true }
+cedarling = { workspace = true }
+
+# Local WASM Tools & Telemetry Bridge
+wasmtime = { workspace = true }
+wasmtime-wasi = { workspace = true }
+tower = { workspace = true }
+hyper = { workspace = true }
+
+# CLI Parsing & Structured Diagnostics
+clap = { workspace = true }
+clap_complete = { workspace = true }
+miette = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+blake3 = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
+criterion = "0.5"
+
+[[bench]]
+name = "shm_zero_copy"
+harness = false
