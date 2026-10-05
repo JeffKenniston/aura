@@ -1,43 +1,45 @@
-# Architectural Implementation Specification: Long-Horizon Background Orchestration
+# Aura CLI Architectural Design Specification: Phase 3
 
-## 1. Architecture Discovery
-- **Module Ownership**:
-  - `aura-sdk` (Python Substrate): The `agent.py` module responsible for API requests must support the `background=True` parameter in the Gemini Interactions API.
-  - `aura-core` (Rust Microkernel): To avoid blocking or high-frequency polling, a Zenoh-bridged webhook endpoint needs to be exposed by the Rust host to receive HTTP POST callbacks from the API when the background interaction status changes.
-- **Invariants Checked**:
-  - **Zero FFI**: Webhook payloads received by Rust (`aura-core`) will be published over the Zenoh bus, and Python (`aura-sdk`) will subscribe to the event. No direct FFI.
-  - **Docker-Free Execution**: The background interaction executes autonomously in the cloud API, while our webhook bridge runs on the Rust host.
+## 1. Overview
+This document specifies Phase 3 of the `aura-cli` architecture, establishing the Two-Layer Zero-Trust Security model. It integrates dynamic SPIFFE workload identities and mutual TLS (mTLS) for transport-layer security (Layer 1), coupled with a Cedar-driven progressive authorization engine (Layer 2) that dynamically halts execution for human intervention.
 
-## 2. AST Blast-Radius Pre-Check
-- **Target Symbol**: `execute_task` in `aura-sdk/aura_sdk/agent.py` and `ZenohClient` in `aura-sdk/aura_sdk/transport.py`.
-- **Query Results**: 2 upstream callers (found in `tests/test_cognitive_cache.py` and `tests/test_cognitive_loop.py`).
-- **Blast Radius**: Low (< 3 callers). Escalate to Gemini 3.1 Pro (Already assigned).
+## 2. Phase Breakdown and Module Boundaries
 
-## 3. Substrate Selection
-- **Role**: Cognitive orchestration layer and network bridging.
-- **Substrate**: The API interaction logic executes in the host Python environment via `aura-sdk`, while the webhook listener operates directly within the `aura-core` Tokio asynchronous runtime.
+### Phase 3.1: Workload Identity (Layer 1)
+- **Objective:** Establish dynamic X.509 cryptographic identities.
+- **Modules (`src/ipc/zenoh.rs`):**
+  - **SPIRE Agent Connection:** The `aura-cli` process connects to the local SPIRE agent endpoint via `WorkloadApiClient::connect_env()` during startup to fetch and maintain its SPIFFE Verifiable Identity Document (SVID).
+  - **Identity Scope:** Target identity resolves to `spiffe://aura.local/workload/aura-cli`.
 
-## 4. Implementation Details
+### Phase 3.2: mTLS Transport
+- **Objective:** Encapsulate the Zenoh SHM topology within authenticated transport.
+- **Modules (`src/ipc/zenoh.rs`):**
+  - **Transport Wrapping:** Utilize `spiffe-rustls-tokio` to secure the Zenoh IPC connection.
+  - **Zero-Trust Invariant:** Connections that lack a valid, unexpired SVID signed by the Aura root cluster authority are immediately dropped.
 
-### Background Execution Parameter
-- **API Call Modification**: Update `execute_task` (or create a dedicated `execute_background_task`) in `aura_sdk/agent.py` to pass `background=True` into `self.client.aio.interactions.create()`.
-- **Interaction Management**: The API will immediately return an `Interaction` object with an `id` and status `in_progress` without streaming blocking events.
+### Phase 3.3: Progressive Authorization (Layer 2)
+- **Objective:** Evaluate autonomous tool invocations against immutable declarative policy schemas.
+- **Modules (`src/auth/cedar.rs` and `src/ui/components/artifact_review.rs`):**
+  - **Policy Engine:** Embed the Cedar policy engine (≥ 3.x) to evaluate incoming `aura/tools/{tool_name}/exec` requests.
+  - **Authorization Tiers:**
+    1. `strict`: Zero trust; all mutations require terminal confirmation.
+    2. `request-review`: Default mode. Halts execution and presents the visual Artifact Review Pane.
+    3. `proceed-in-sandbox`: Forwards request securely to Firecracker or WASI 0.3 environments.
+    4. `always-proceed`: Automated execution strictly for CI/CD environments.
+  - **Interactive Review:** The `AppModel` transitions into a review state when a forbid condition triggers under `request-review`, prompting the user via the `ratatui` interface to manually approve unified code diffs.
 
-### Zenoh-Bridged Webhook Monitoring
-- **Rust Webhook Listener (`aura-core`)**:
-  - Implement a lightweight HTTP listener in `aura-core` running on an exposed port.
-  - When the Gemini API sends an event to the webhook, Rust deserializes the status update.
-  - `aura-core` publishes the status payload to the Zenoh bus under `aura/workspace/{svid}/interactions/{interaction_id}/status`.
-- **Python Substrate Subscriber (`aura-sdk`)**:
-  - The `ZenohClient` in `aura-sdk` will declare a subscriber for `interactions/+/status`.
-  - When a `completed`, `failed`, or `requires_action` event arrives over Zenoh, the Python orchestrator resumes execution, retrieves the final result via `self.client.aio.interactions.get()`, and proceeds without aggressively polling in an active loop.
+## 3. Substrate Evaluation
+- **Execution Substrate:** `aura-cli` binary. Execution of accepted requests cascades to either lightweight WASI 0.3 WebAssembly runtimes or ephemeral Firecracker MicroVMs.
+- **Model Routing Tier:** Gemini 3.1 Pro (Tier 3 architectural design allocation).
+
+## 4. Invariants Verified
+- **Docker-Free Bifurcated Sandboxing:** Authorization rules enforce that accepted tasks never route to traditional OCI containers.
+- **SVID Attestation Requirement:** No unauthenticated process on the local loopback interface can spoof `aura-cli` Zenoh messages.
 
 ## 5. Verification Gates
-1. **Lint and Type Check**: `cargo clippy`, `cargo fmt --check`, `ruff`, and `mypy` must pass.
-2. **End-to-End Tests**:
-   - Write a mock test verifying that invoking a task with `background=True` returns immediately.
-   - Simulate an HTTP POST to the Rust webhook endpoint and assert that the Python agent receives the Zenoh callback and transitions state successfully.
+1. **Gate 2: Attestation Dropping Test:** Simulate an untrusted local script pushing a message to the Zenoh topology without a SPIFFE SVID. The engine must reject the connection and log the `spiffe-rustls-tokio` drop natively.
+2. **Cedar Policy Evaluation Assertion:** Assert that under the `request-review` default tier, a system-level tool execution (e.g., modifying `Cargo.toml`) returns a `Forbid` decision that triggers the Artifact Review Pane callback.
 
-## 6. Rollback Plan
-- Revert changes to `aura-sdk/aura_sdk/agent.py` and `transport.py`.
-- Revert additions in `aura-core` for the webhook listener.
+## 6. Rollback Strategy
+- The implementation resides on the `feature/cli-security` branch.
+- Should the local SPIRE agent fail to initialize consistently within the WSL2 network namespace, we will temporarily downgrade the Zenoh transport to loopback TCP to unblock development while maintaining Cedar's Layer 2 authorization engine.

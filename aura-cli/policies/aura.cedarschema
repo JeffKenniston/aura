@@ -1,0 +1,47 @@
+namespace Aura {
+  entity Workload;
+  entity Workspace;
+
+  enum PermissionTier {
+    "strict",
+    "request-review",
+    "proceed-in-sandbox",
+    "always-proceed"
+  };
+
+  action ReadFile appliesTo {
+    principal: [Workload],
+    resource: [Workspace],
+    context: {
+      permission_mode: PermissionTier,
+      human_explicitly_approved: Bool
+    }
+  };
+
+  action QueryIndex appliesTo {
+    principal: [Workload],
+    resource: [Workspace],
+    context: {
+      permission_mode: PermissionTier,
+      human_explicitly_approved: Bool
+    }
+  };
+
+  action WriteFile appliesTo {
+    principal: [Workload],
+    resource: [Workspace],
+    context: {
+      permission_mode: PermissionTier,
+      human_explicitly_approved: Bool
+    }
+  };
+
+  action ExecuteBash appliesTo {
+    principal: [Workload],
+    resource: [Workspace],
+    context: {
+      permission_mode: PermissionTier,
+      human_explicitly_approved: Bool
+    }
+  };
+}

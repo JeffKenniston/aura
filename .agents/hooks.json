@@ -16,9 +16,30 @@
       },
       "action": {
         "type": "command",
-        "command": "cargo fmt --check --quiet || cargo check --quiet",
+        "command": "cargo fmt --check --quiet || cargo check --workspace --quiet",
         "failOnError": true,
-        "description": "Deterministic Rust syntax and formatting validation via cargo"
+        "description": "Deterministic Rust syntax and formatting validation across workspace"
+      }
+    },
+    {
+      "event": "PostToolUse",
+      "matcher": {
+        "tools": [
+          "filesystem",
+          "edit_file",
+          "write_to_file",
+          "patch_file"
+        ],
+        "pathPatterns": [
+          "aura-cli/**/*.rs",
+          "aura-cli/**/*.cedar"
+        ]
+      },
+      "action": {
+        "type": "command",
+        "command": "cargo check --package aura-cli --quiet",
+        "failOnError": true,
+        "description": "Targeted compilation check for aura-cli"
       }
     },
     {
@@ -42,27 +63,6 @@
       }
     },
     {
-      "event": "PostToolUse",
-      "matcher": {
-        "tools": [
-          "filesystem",
-          "edit_file",
-          "write_to_file",
-          "patch_file"
-        ],
-        "pathPatterns": [
-          "**/*.rs",
-          "**/*.py"
-        ]
-      },
-      "action": {
-        "type": "command",
-        "command": "tree-sitter parse --quiet 2>/dev/null || true",
-        "failOnError": false,
-        "description": "Concrete Syntax Tree (CST) structural integrity verification"
-      }
-    },
-    {
       "event": "PreToolUse",
       "matcher": {
         "tools": [
@@ -76,22 +76,6 @@
         "command": "test -c /dev/kvm",
         "failOnError": true,
         "description": "Verifies hardware virtualization device access prior to spawning Firecracker microVM"
-      }
-    },
-    {
-      "event": "PreToolUse",
-      "matcher": {
-        "tools": [
-          "filesystem",
-          "edit_file",
-          "write_to_file"
-        ]
-      },
-      "action": {
-        "type": "command",
-        "command": "test -S /run/spire/sockets/agent.sock || true",
-        "failOnError": false,
-        "description": "Verifies active SPIRE agent socket for zero-trust identity attestation"
       }
     }
   ]
