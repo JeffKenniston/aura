@@ -1,38 +1,47 @@
-# Aura CLI Architectural Design Specification
+# Aura CLI Architectural Design Specification: Phase 1
 
 ## 1. Overview
-This document outlines the architectural plan for the Aura CLI (`aura-cli`), the pure Rust presentation node and IPC client. It covers the Terminal Rendering Engine, Progressive Authorization integration, Headless Subagent Pipelines, and the requisite Engineering Validation Gates.
+This architectural plan dictates the Phase 1 implementation for the Aura CLI (`aura-cli`), establishing the core Terminal User Interface (TUI) foundation and the asynchronous execution architecture. The design enforces zero-garbage-collection limits and prioritizes sub-millisecond frame rendering via double buffering.
 
-## 2. Target Components and Module Boundaries
-- **`aura-cli` (Execution Host - Rust):**
-  - **Main Event Loop (`src/tea/loop.rs`):** A central `tokio::select!` block multiplexing user keyboard signals, Zero-Copy Zenoh IPC messages, and native WASI 0.3 async telemetry channels.
-  - **State Model & Update (`src/tea/model.rs`, `src/tea/update.rs`):** The immutable `AppModel` and pure update functions for the asynchronous TEA architecture.
-  - **View & Graphics (`src/ui/view.rs`, `src/ui/graphics.rs`):** Immediate-mode rendering logic outputting to `ratatui` (>= 0.28). Integration with `ratatui-image` for inline Sixel/Kitty Graphics.
-  - **Progressive Authorization (`src/auth/cedar.rs`):** Integration with the Cedar Policy Engine (`cedar-policy`, `cedarling`) to evaluate proposed tool executions against four tiers: `strict`, `request-review`, `proceed-in-sandbox`, and `always-proceed`.
-  - **Artifact Review Pane (`src/ui/components/artifact_review.rs`):** Interactive UI component that intercepts mutations requiring explicit human approval, displaying zero-copy unified diffs to the user.
-  - **Headless Mode (`src/headless/pipeline.rs`):** The `--headless -p` execution mode. Bypasses terminal UI, hashes the `AGENTS.md` context using BLAKE3, routes execution to Gemini 3.5 Flash-Lite, and emits structured JSON/SSE to POSIX stdout.
-  - **Zenoh Client (`src/ipc/zenoh.rs`):** Handles `zenoh-shm` with `#[repr(C)]` layouts and `TypedLayout` zero-deserialization mapping.
+## 2. Phase Breakdown and Module Boundaries
+
+### Phase 1.1: Binary Target and Baseline Setup
+- **Objective:** Establish the foundational cross-compilation matrix.
+- **Targets:**
+  - `x86_64-unknown-linux-musl` (Statically linked Linux AMD64)
+  - `aarch64-unknown-linux-musl` (Statically linked Linux ARM64)
+  - `wasm32-wasip2` (WASI 0.3 Component Model)
+- **Constraints:** Zero-garbage-collection footprint. The build pipeline (`.cargo/config.toml` and CI) will be strictly bound to these targets to ensure environment portability without `glibc` dependencies.
+
+### Phase 1.2: Terminal Interface Rendering
+- **Objective:** Construct the immediate-mode terminal layer.
+- **Modules (`src/ui`):**
+  - **Double-Buffering Engine:** Integrates `ratatui` (≥ 0.28) and `crossterm` (≥ 0.28). The engine evaluates character cell deltas across frames, mutating only the changed terminal grid spaces.
+  - **Tearing Prevention:** The architecture explicitly mitigates screen tearing during rapid LLM token emission by buffering the entire frame internally before flushing via `crossterm` synchronization sequences.
+
+### Phase 1.3: The Asynchronous Event Loop
+- **Objective:** Deploy the asynchronous adaptation of The Elm Architecture (TEA).
+- **Modules (`src/tea`):**
+  - **Work-Stealing Scheduler:** The binary initializes a multi-threaded `tokio` runtime configured for work-stealing to decouple I/O bottlenecks from the rendering thread.
+  - **Multiplexer (`tokio::select!`):** The central `loop.rs` multiplexes three distinct streams without thread starvation:
+    1. Terminal input streams (`crossterm::event::EventStream`).
+    2. Zero-Copy `zenoh-shm` IPC events (`aura-core` telemetry).
+    3. Background WASI 0.3 asynchronous channels.
 
 ## 3. Substrate Evaluation
-- **Execution Substrate:** Pure Rust compiled binary (`aura-cli`). No Docker sandboxing is used. WASI 0.3 WebAssembly handles lightweight tasks, and Firecracker microVMs are utilized for OS integration tasks.
-- **Model Routing Tier:**
-  - **Tier 3 (Architecture Planning):** Gemini 3.1 Pro (Completed by this plan).
-  - **Feature Implementation:** Gemini 3.8 Flash.
-  - **Subagent Delegation & Headless Pipelines:** Gemini 3.5 Flash-Lite.
+- **Execution Substrate:** Pure Rust compiled binary deployed via static musl or WASI 0.3 WebAssembly components.
+- **Model Routing Tier:** Gemini 3.1 Pro is allocated for this foundational Tier 3 architectural phase. 
 
 ## 4. Invariants Verified
-- **Zero FFI:** The presentation layer is pure Rust. It communicates with Python agents or other processes exclusively via the asynchronous Zenoh bus. No `PyO3` or C-FFI will be introduced.
-- **Stateless Presentation:** The CLI contains no LLM network stacks or database drivers. State is derived entirely from the IPC event stream and user inputs.
-- **Asynchronous TEA Concurrency:** Rendering is fully decoupled from I/O. The `tokio::select!` loop guarantees that IPC message deserialization or WASI telemetry streams will not starve UI frame rendering (targeting 60 FPS).
-- **Transport Attestation (Layer 1 Security):** The `aura-cli` Zenoh client enforces mutual TLS via SPIFFE SVIDs (`spiffe-rustls-tokio`) targeting `spiffe://aura.local/workload/aura-cli`.
+- **Zero FFI:** No dynamic linking or Foreign Function Interfaces (FFI). All components compile strictly to static `musl` or WASI endpoints.
+- **Docker-Free Execution:** Target triples explicitly sidestep container runtimes.
+- **Decoupled Framing:** The event loop strictly separates model mutation from frame rendering to ensure steady 60 FPS under high token loads.
 
-## 5. Step-by-step Verification Gates
-To qualify the `aura-cli` engine prior to release, the following automated benchmarks will be executed:
-- **Gate 1 (Zero-Copy Memory Benchmark):** Transmit a 50MB structured unified code diff from `aura-core` over `zenoh-shm`. Validate that `aura-cli` heap memory delta is ≤ 512KB and UI render latency remains sub-millisecond.
-- **Gate 2 (Attestation Test):** Launch an unauthenticated local process attempting to inject messages to the `aura-cli` IPC port. Verify rejection via `spiffe-rustls-tokio` without kernel panics.
-- **Gate 3 (Headless Throughput):** Run `aura-cli --headless -p "test"` in CI without PTY allocation (`-t=false`). Verify valid structured JSON lines or SSE are emitted to stdout and TUI rendering is entirely bypassed.
-- **Gate 4 (WASI 0.3 Concurrency):** Simulate concurrent asynchronous future yields from WASI tool invocations. Validate that the TEA event loop maintains a stable 60 FPS without starvation.
+## 5. Verification Gates
+1. **Compilation Matrix Check:** `cargo build --target x86_64-unknown-linux-musl` and `cargo build --target wasm32-wasip2` must successfully link.
+2. **Double-Buffering Validation:** High-velocity token streams generated programmatically must be evaluated visually and computationally for cell-delta accuracy.
+3. **Starvation Benchmark:** The `tokio` task queue length and executor metrics must prove the terminal input stream remains responsive while WASI or Zenoh channels saturate.
 
 ## 6. Rollback Strategy
-- **Version Control Reversion:** If any of the above verification gates fail during integration, the feature branch will be reverted (`git revert <commit>`).
-- **Circuit Breaker Integration:** If a component repeatedly fails to compile or pass tests within three iterations during autonomous development, the agent will halt and formulate a clarifying diagnostic dossier for the human reviewer.
+- Feature modifications are constrained to `feature/cli-foundation`.
+- Any breakdown in `wasm32-wasip2` compatibility due to `tokio` or `crossterm` unsupported OS polling will trigger an immediate reversion and substitution with conditional compilation paths.

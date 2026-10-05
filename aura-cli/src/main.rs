@@ -22,6 +22,12 @@ pub mod ipc {
 }
 
 use clap::Parser;
+use std::io;
+use ratatui::{backend::CrosstermBackend, Terminal};
+use crossterm::{
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -35,7 +41,8 @@ struct Args {
     p: Option<String>,
 }
 
-fn main() {
+#[tokio::main(flavor = "multi_thread")]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     if args.headless {
@@ -46,8 +53,33 @@ fn main() {
         } else {
             eprintln!("Error: Headless mode requires a payload (-p)");
         }
-        return;
+        return Ok(());
     }
 
-    println!("Aura CLI");
+    // Initialize immediate-mode terminal rendering (ratatui + crossterm)
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+    
+    // Initialize state model
+    let mut model = tea::model::AppModel { running: true };
+
+    // Run the Asynchronous TEA event loop
+    let res = tea::r#loop::run_loop(&mut terminal, &mut model).await;
+
+    // Restore terminal
+    disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+    )?;
+    terminal.show_cursor()?;
+
+    if let Err(err) = res {
+        eprintln!("{:?}", err);
+    }
+
+    Ok(())
 }

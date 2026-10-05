@@ -10,6 +10,7 @@ use super::model::AppModel;
 use super::message::Message;
 use super::update::update;
 use crate::ui::view::view;
+use crate::ipc::zenoh::ZenohIpcClient;
 
 pub async fn run_loop(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
@@ -18,11 +19,18 @@ pub async fn run_loop(
     let mut reader = EventStream::new();
     let mut tick_interval = time::interval(Duration::from_millis(16)); // ~60fps
 
+    // Dummy WASI channel
+    let (wasi_tx, mut wasi_rx) = tokio::sync::mpsc::channel::<()>(32);
+
+    // Dummy Zenoh SHM IPC channel (Normally we'd use ZenohIpcClient's subscriber)
+    let mut ipc_rx = Box::pin(tokio_stream::iter(std::iter::empty::<()>()));
+
     while model.running {
         terminal.draw(|f| {
             view(f, model);
         })?;
 
+        // Multiplex three distinct streams using work-stealing tokio scheduler to prevent starvation
         tokio::select! {
             _ = tick_interval.tick() => {
                 update(model, Message::Tick);
@@ -35,6 +43,12 @@ pub async fn run_loop(
                     }
                     _ => {}
                 }
+            }
+            Some(_) = ipc_rx.next() => {
+                // Process Zero-Copy Zenoh IPC event
+            }
+            Some(_) = wasi_rx.recv() => {
+                // Process WASI 0.3 asynchronous channel event
             }
         }
     }
