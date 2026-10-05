@@ -1,44 +1,45 @@
-# Aura CLI Architectural Design Specification: Phase 2
+# Aura CLI Architectural Design Specification: Phase 3
 
 ## 1. Overview
-This specification delineates Phase 2 of the `aura-cli` architecture, focusing exclusively on establishing a high-performance, zero-copy Inter-Process Communication (IPC) layer. It replaces traditional socket-based IPC by integrating Eclipse Zenoh (≥ 1.5) Shared Memory (SHM), enabling deterministic sub-millisecond data transmission between the `aura-cli` frontend and the `aura-core` execution microkernel.
+This document specifies Phase 3 of the `aura-cli` architecture, establishing the Two-Layer Zero-Trust Security model. It integrates dynamic SPIFFE workload identities and mutual TLS (mTLS) for transport-layer security (Layer 1), coupled with a Cedar-driven progressive authorization engine (Layer 2) that dynamically halts execution for human intervention.
 
 ## 2. Phase Breakdown and Module Boundaries
 
-### Phase 2.1: Zenoh Integration
-- **Objective:** Eliminate TCP serialization overhead and traditional UNIX domain sockets.
+### Phase 3.1: Workload Identity (Layer 1)
+- **Objective:** Establish dynamic X.509 cryptographic identities.
 - **Modules (`src/ipc/zenoh.rs`):**
-  - **Shared Memory Topological Bus:** Integrate `zenoh` and `zenoh-shm` dependencies to instantiate the client node.
-  - **Connection Topology:** Connect the CLI directly to the `aura-core` execution microkernel via Zenoh's publish/subscribe topological bus rather than point-to-point sockets.
+  - **SPIRE Agent Connection:** The `aura-cli` process connects to the local SPIRE agent endpoint via `WorkloadApiClient::connect_env()` during startup to fetch and maintain its SPIFFE Verifiable Identity Document (SVID).
+  - **Identity Scope:** Target identity resolves to `spiffe://aura.local/workload/aura-cli`.
 
-### Phase 2.2: Semantic Key Routing
-- **Objective:** Establish a canonical namespace for deterministic event and state routing.
-- **Key Expressions:**
-  - `aura/repository/index?workspace={path}`: Used for broadcasting context ingestion and workspace index updates.
-  - `aura/core/agent/{session_id}/stream`: Used to subscribe to high-frequency execution telemetry and token emissions from active model sessions.
-  - `aura/sessions/{session_id}/approval`: Used for authorizing Cedar policy interception prompts.
+### Phase 3.2: mTLS Transport
+- **Objective:** Encapsulate the Zenoh SHM topology within authenticated transport.
+- **Modules (`src/ipc/zenoh.rs`):**
+  - **Transport Wrapping:** Utilize `spiffe-rustls-tokio` to secure the Zenoh IPC connection.
+  - **Zero-Trust Invariant:** Connections that lack a valid, unexpired SVID signed by the Aura root cluster authority are immediately dropped.
 
-### Phase 2.3: Shared Memory Deserialization
-- **Objective:** Enable zero-copy memory access for large payloads (> 4KB).
-- **Memory Layout (`src/ipc/layout.rs`):**
-  - **C-Aligned Structs:** Define shared payload boundaries using `#[repr(C)]` data structures to ensure ABI compatibility across the Zenoh bus.
-  - **Typed SHM Buffers:** Implement Zenoh `TypedLayout` mappings to cast memory pointers directly into native Rust structures.
-  - **Zero Deserialization:** Bypass serde/JSON serialization entirely for high-bandwidth payloads such as unified code diffs and Concrete Syntax Tree (CST) AST graphs.
+### Phase 3.3: Progressive Authorization (Layer 2)
+- **Objective:** Evaluate autonomous tool invocations against immutable declarative policy schemas.
+- **Modules (`src/auth/cedar.rs` and `src/ui/components/artifact_review.rs`):**
+  - **Policy Engine:** Embed the Cedar policy engine (≥ 3.x) to evaluate incoming `aura/tools/{tool_name}/exec` requests.
+  - **Authorization Tiers:**
+    1. `strict`: Zero trust; all mutations require terminal confirmation.
+    2. `request-review`: Default mode. Halts execution and presents the visual Artifact Review Pane.
+    3. `proceed-in-sandbox`: Forwards request securely to Firecracker or WASI 0.3 environments.
+    4. `always-proceed`: Automated execution strictly for CI/CD environments.
+  - **Interactive Review:** The `AppModel` transitions into a review state when a forbid condition triggers under `request-review`, prompting the user via the `ratatui` interface to manually approve unified code diffs.
 
 ## 3. Substrate Evaluation
-- **Execution Substrate:** Pure Rust compiled binary (`aura-cli`). Memory mapping occurs natively within the OS virtual memory manager via Zenoh's SHM provider.
-- **Model Routing Tier:** Gemini 3.1 Pro (Tier 3 architectural design phase).
+- **Execution Substrate:** `aura-cli` binary. Execution of accepted requests cascades to either lightweight WASI 0.3 WebAssembly runtimes or ephemeral Firecracker MicroVMs.
+- **Model Routing Tier:** Gemini 3.1 Pro (Tier 3 architectural design allocation).
 
 ## 4. Invariants Verified
-- **Zero FFI:** No dynamic Foreign Function Interfaces (C-FFI, PyO3) are required to interoperate with the Python `aura-sdk`; Python nodes access the same Zenoh key expressions, preserving Rust's memory safety.
-- **Zero-Copy Boundary:** Memory is mapped directly into `aura-cli` without heap reallocations or `memcpy` calls.
-- **SPIFFE Validation Layer:** The underlying Zenoh session must continue enforcing mTLS attestation via `spiffe-rustls-tokio`.
+- **Docker-Free Bifurcated Sandboxing:** Authorization rules enforce that accepted tasks never route to traditional OCI containers.
+- **SVID Attestation Requirement:** No unauthenticated process on the local loopback interface can spoof `aura-cli` Zenoh messages.
 
 ## 5. Verification Gates
-1. **Gate 1: Zero-Copy Memory Benchmark:** (Previously stubbed in `benches/shm_zero_copy.rs`). Must execute and transmit a 50MB code diff payload. The heap delta process metrics must register ≤ 512KB growth.
-2. **Key Routing Assertion:** Subscriptions to `aura/core/agent/+/stream` must correctly route wildcard topologies to the TEA event multiplexer.
-3. **TypedLayout Mapping Validation:** A C-aligned struct injected by `aura-core` must be losslessly cast into `aura-cli` via `zenoh-shm` without undefined behavior or segmentation faults.
+1. **Gate 2: Attestation Dropping Test:** Simulate an untrusted local script pushing a message to the Zenoh topology without a SPIFFE SVID. The engine must reject the connection and log the `spiffe-rustls-tokio` drop natively.
+2. **Cedar Policy Evaluation Assertion:** Assert that under the `request-review` default tier, a system-level tool execution (e.g., modifying `Cargo.toml`) returns a `Forbid` decision that triggers the Artifact Review Pane callback.
 
 ## 6. Rollback Strategy
-- Modifications will be isolated to the `feature/cli-ipc` branch.
-- If `zenoh-shm` allocation triggers permission errors under strict WSL2 or Linux namespaces, we will fall back to loopback UDP Zenoh routing as a temporary circuit breaker while preserving the semantic key routing abstractions.
+- The implementation resides on the `feature/cli-security` branch.
+- Should the local SPIRE agent fail to initialize consistently within the WSL2 network namespace, we will temporarily downgrade the Zenoh transport to loopback TCP to unblock development while maintaining Cedar's Layer 2 authorization engine.

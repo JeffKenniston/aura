@@ -7,20 +7,24 @@ use ratatui::{
 };
 
 pub struct ArtifactReviewPane {
-    pub diff_text: String,
+    pub diff_content: String,
+    pub is_active: bool,
 }
 
 impl ArtifactReviewPane {
-    pub fn new(diff_text: String) -> Self {
-        Self { diff_text }
+    pub fn new() -> Self {
+        Self {
+            diff_content: String::new(),
+            is_active: false,
+        }
     }
 
-    pub fn render(&self, frame: &mut Frame, area: Rect) {
-        let block = Block::default()
-            .title("Artifact Review - Zero-Copy Diff")
-            .borders(Borders::ALL);
+    pub fn render(&self, f: &mut Frame, area: Rect) {
+        if !self.is_active {
+            return;
+        }
 
-        let lines: Vec<Line> = self.diff_text
+        let lines: Vec<Line> = self.diff_content
             .lines()
             .map(|line| {
                 if line.starts_with('+') {
@@ -33,7 +37,9 @@ impl ArtifactReviewPane {
             })
             .collect();
 
-        let paragraph = Paragraph::new(lines).block(block);
-        frame.render_widget(paragraph, area);
+        let paragraph = Paragraph::new(lines)
+            .block(Block::default().title(" Artifact Review Pane (Cedar: Forbid) ").borders(Borders::ALL));
+
+        f.render_widget(paragraph, area);
     }
 }

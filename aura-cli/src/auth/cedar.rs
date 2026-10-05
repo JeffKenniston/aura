@@ -1,7 +1,7 @@
-use cedar_policy::{Authorizer, Context, Decision, Entities, EntityUid, PolicySet, Request};
+use cedar_policy::{Authorizer, Context, Decision, Entities, PolicySet, Request};
 use std::str::FromStr;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub enum PermissionTier {
     Strict,
     RequestReview,
@@ -15,40 +15,46 @@ pub struct CedarAuthorizer {
 }
 
 impl CedarAuthorizer {
-    pub fn new(policy_str: &str) -> Result<Self, cedar_policy::ParseErrors> {
-        let policies = PolicySet::from_str(policy_str)?;
-        let authorizer = Authorizer::new();
-        Ok(Self { authorizer, policies })
+    pub fn new() -> Result<Self, String> {
+        let policy_str = r#"
+            // Default rule: Request Review for tool executions
+            permit(
+                principal,
+                action == Action::"exec",
+                resource
+            ) when {
+                context.tier == "request-review"
+            };
+        "#;
+        
+        let policies = PolicySet::from_str(policy_str).map_err(|e| e.to_string())?;
+        
+        Ok(Self {
+            authorizer: Authorizer::new(),
+            policies,
+        })
     }
 
-    pub fn evaluate(
-        &self,
-        principal: &str,
-        action: &str,
-        resource: &str,
-        entities: &Entities,
-    ) -> Result<PermissionTier, String> {
-        let principal_uid = EntityUid::from_str(principal).map_err(|e| e.to_string())?;
-        let action_uid = EntityUid::from_str(action).map_err(|e| e.to_string())?;
-        let resource_uid = EntityUid::from_str(resource).map_err(|e| e.to_string())?;
-
-        let request = Request::new(
-            Some(principal_uid),
-            Some(action_uid),
-            Some(resource_uid),
-            Context::empty(),
-            None,
-        ).map_err(|e| e.to_string())?;
-
-        let answer = self.authorizer.is_authorized(&request, &self.policies, entities);
-
-        match answer.decision() {
-            Decision::Allow => {
-                // In a real implementation we would inspect the annotations or specific policy IDs
-                // to distinguish between RequestReview, ProceedInSandbox, and AlwaysProceed.
-                Ok(PermissionTier::RequestReview)
-            }
-            Decision::Deny => Ok(PermissionTier::Strict),
-        }
+    pub fn evaluate_tool_request(&self, tool_name: &str, requested_tier: PermissionTier) -> Result<Decision, String> {
+        let principal = r#"User::"aura-cli""#.parse().unwrap();
+        let action = r#"Action::"exec""#.parse().unwrap();
+        let resource = format!(r#"Tool::"{}""#, tool_name).parse().unwrap();
+        
+        let context_json = match requested_tier {
+            PermissionTier::Strict => serde_json::json!({"tier": "strict"}),
+            PermissionTier::RequestReview => serde_json::json!({"tier": "request-review"}),
+            PermissionTier::ProceedInSandbox => serde_json::json!({"tier": "proceed-in-sandbox"}),
+            PermissionTier::AlwaysProceed => serde_json::json!({"tier": "always-proceed"}),
+        };
+        
+        let context = Context::from_json_value(context_json, None).map_err(|e| e.to_string())?;
+        
+        let request = Request::new(Some(principal), Some(action), Some(resource), context, None)
+            .map_err(|e| e.to_string())?;
+            
+        let entities = Entities::empty();
+        let response = self.authorizer.is_authorized(&request, &self.policies, &entities);
+        
+        Ok(response.decision())
     }
 }
