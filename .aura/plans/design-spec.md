@@ -1,47 +1,44 @@
-# Aura CLI Architectural Design Specification: Phase 1
+# Aura CLI Architectural Design Specification: Phase 2
 
 ## 1. Overview
-This architectural plan dictates the Phase 1 implementation for the Aura CLI (`aura-cli`), establishing the core Terminal User Interface (TUI) foundation and the asynchronous execution architecture. The design enforces zero-garbage-collection limits and prioritizes sub-millisecond frame rendering via double buffering.
+This specification delineates Phase 2 of the `aura-cli` architecture, focusing exclusively on establishing a high-performance, zero-copy Inter-Process Communication (IPC) layer. It replaces traditional socket-based IPC by integrating Eclipse Zenoh (≥ 1.5) Shared Memory (SHM), enabling deterministic sub-millisecond data transmission between the `aura-cli` frontend and the `aura-core` execution microkernel.
 
 ## 2. Phase Breakdown and Module Boundaries
 
-### Phase 1.1: Binary Target and Baseline Setup
-- **Objective:** Establish the foundational cross-compilation matrix.
-- **Targets:**
-  - `x86_64-unknown-linux-musl` (Statically linked Linux AMD64)
-  - `aarch64-unknown-linux-musl` (Statically linked Linux ARM64)
-  - `wasm32-wasip2` (WASI 0.3 Component Model)
-- **Constraints:** Zero-garbage-collection footprint. The build pipeline (`.cargo/config.toml` and CI) will be strictly bound to these targets to ensure environment portability without `glibc` dependencies.
+### Phase 2.1: Zenoh Integration
+- **Objective:** Eliminate TCP serialization overhead and traditional UNIX domain sockets.
+- **Modules (`src/ipc/zenoh.rs`):**
+  - **Shared Memory Topological Bus:** Integrate `zenoh` and `zenoh-shm` dependencies to instantiate the client node.
+  - **Connection Topology:** Connect the CLI directly to the `aura-core` execution microkernel via Zenoh's publish/subscribe topological bus rather than point-to-point sockets.
 
-### Phase 1.2: Terminal Interface Rendering
-- **Objective:** Construct the immediate-mode terminal layer.
-- **Modules (`src/ui`):**
-  - **Double-Buffering Engine:** Integrates `ratatui` (≥ 0.28) and `crossterm` (≥ 0.28). The engine evaluates character cell deltas across frames, mutating only the changed terminal grid spaces.
-  - **Tearing Prevention:** The architecture explicitly mitigates screen tearing during rapid LLM token emission by buffering the entire frame internally before flushing via `crossterm` synchronization sequences.
+### Phase 2.2: Semantic Key Routing
+- **Objective:** Establish a canonical namespace for deterministic event and state routing.
+- **Key Expressions:**
+  - `aura/repository/index?workspace={path}`: Used for broadcasting context ingestion and workspace index updates.
+  - `aura/core/agent/{session_id}/stream`: Used to subscribe to high-frequency execution telemetry and token emissions from active model sessions.
+  - `aura/sessions/{session_id}/approval`: Used for authorizing Cedar policy interception prompts.
 
-### Phase 1.3: The Asynchronous Event Loop
-- **Objective:** Deploy the asynchronous adaptation of The Elm Architecture (TEA).
-- **Modules (`src/tea`):**
-  - **Work-Stealing Scheduler:** The binary initializes a multi-threaded `tokio` runtime configured for work-stealing to decouple I/O bottlenecks from the rendering thread.
-  - **Multiplexer (`tokio::select!`):** The central `loop.rs` multiplexes three distinct streams without thread starvation:
-    1. Terminal input streams (`crossterm::event::EventStream`).
-    2. Zero-Copy `zenoh-shm` IPC events (`aura-core` telemetry).
-    3. Background WASI 0.3 asynchronous channels.
+### Phase 2.3: Shared Memory Deserialization
+- **Objective:** Enable zero-copy memory access for large payloads (> 4KB).
+- **Memory Layout (`src/ipc/layout.rs`):**
+  - **C-Aligned Structs:** Define shared payload boundaries using `#[repr(C)]` data structures to ensure ABI compatibility across the Zenoh bus.
+  - **Typed SHM Buffers:** Implement Zenoh `TypedLayout` mappings to cast memory pointers directly into native Rust structures.
+  - **Zero Deserialization:** Bypass serde/JSON serialization entirely for high-bandwidth payloads such as unified code diffs and Concrete Syntax Tree (CST) AST graphs.
 
 ## 3. Substrate Evaluation
-- **Execution Substrate:** Pure Rust compiled binary deployed via static musl or WASI 0.3 WebAssembly components.
-- **Model Routing Tier:** Gemini 3.1 Pro is allocated for this foundational Tier 3 architectural phase. 
+- **Execution Substrate:** Pure Rust compiled binary (`aura-cli`). Memory mapping occurs natively within the OS virtual memory manager via Zenoh's SHM provider.
+- **Model Routing Tier:** Gemini 3.1 Pro (Tier 3 architectural design phase).
 
 ## 4. Invariants Verified
-- **Zero FFI:** No dynamic linking or Foreign Function Interfaces (FFI). All components compile strictly to static `musl` or WASI endpoints.
-- **Docker-Free Execution:** Target triples explicitly sidestep container runtimes.
-- **Decoupled Framing:** The event loop strictly separates model mutation from frame rendering to ensure steady 60 FPS under high token loads.
+- **Zero FFI:** No dynamic Foreign Function Interfaces (C-FFI, PyO3) are required to interoperate with the Python `aura-sdk`; Python nodes access the same Zenoh key expressions, preserving Rust's memory safety.
+- **Zero-Copy Boundary:** Memory is mapped directly into `aura-cli` without heap reallocations or `memcpy` calls.
+- **SPIFFE Validation Layer:** The underlying Zenoh session must continue enforcing mTLS attestation via `spiffe-rustls-tokio`.
 
 ## 5. Verification Gates
-1. **Compilation Matrix Check:** `cargo build --target x86_64-unknown-linux-musl` and `cargo build --target wasm32-wasip2` must successfully link.
-2. **Double-Buffering Validation:** High-velocity token streams generated programmatically must be evaluated visually and computationally for cell-delta accuracy.
-3. **Starvation Benchmark:** The `tokio` task queue length and executor metrics must prove the terminal input stream remains responsive while WASI or Zenoh channels saturate.
+1. **Gate 1: Zero-Copy Memory Benchmark:** (Previously stubbed in `benches/shm_zero_copy.rs`). Must execute and transmit a 50MB code diff payload. The heap delta process metrics must register ≤ 512KB growth.
+2. **Key Routing Assertion:** Subscriptions to `aura/core/agent/+/stream` must correctly route wildcard topologies to the TEA event multiplexer.
+3. **TypedLayout Mapping Validation:** A C-aligned struct injected by `aura-core` must be losslessly cast into `aura-cli` via `zenoh-shm` without undefined behavior or segmentation faults.
 
 ## 6. Rollback Strategy
-- Feature modifications are constrained to `feature/cli-foundation`.
-- Any breakdown in `wasm32-wasip2` compatibility due to `tokio` or `crossterm` unsupported OS polling will trigger an immediate reversion and substitution with conditional compilation paths.
+- Modifications will be isolated to the `feature/cli-ipc` branch.
+- If `zenoh-shm` allocation triggers permission errors under strict WSL2 or Linux namespaces, we will fall back to loopback UDP Zenoh routing as a temporary circuit breaker while preserving the semantic key routing abstractions.

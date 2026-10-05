@@ -19,6 +19,7 @@ pub mod headless {
 }
 pub mod ipc {
     pub mod zenoh;
+    pub mod layout;
 }
 
 use clap::Parser;
