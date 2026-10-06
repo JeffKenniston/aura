@@ -1,3 +1,4 @@
+use serde_json::json;
 use std::error::Error;
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
@@ -61,16 +62,20 @@ impl FirecrackerVm {
         // In a complete implementation, kernel and rootfs would be hardlinked/copied
         // into the jailer chroot environment before this step.
 
-        let boot_source_json = format!(
-            r#"{{"kernel_image_path": "{}", "boot_args": "console=ttyS0 reboot=k panic=1 pci=off"}}"#,
-            kernel_path
-        );
+        let boot_source_json = json!({
+            "kernel_image_path": kernel_path,
+            "boot_args": "console=ttyS0 reboot=k panic=1 pci=off"
+        })
+        .to_string();
         self.send_api_request("PUT", "/boot-source", &boot_source_json)?;
 
-        let drive_json = format!(
-            r#"{{"drive_id": "rootfs", "path_on_host": "{}", "is_root_device": true, "is_read_only": false}}"#,
-            rootfs_path
-        );
+        let drive_json = json!({
+            "drive_id": "rootfs",
+            "path_on_host": rootfs_path,
+            "is_root_device": true,
+            "is_read_only": false
+        })
+        .to_string();
         self.send_api_request("PUT", "/drives/rootfs", &drive_json)?;
 
         // Ensure < 5MiB memory overhead by configuring tiny machine.
