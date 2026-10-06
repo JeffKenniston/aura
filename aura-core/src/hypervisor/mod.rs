@@ -14,3 +14,14 @@ pub fn init_firecracker() -> Result<(), Box<dyn std::error::Error>> {
     println!("Preparing ephemeral Firecracker microVM KVM management via jailer...");
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_init_firecracker() {
+        let result = init_firecracker();
+        assert!(result.is_ok(), "init_firecracker should return Ok");
+    }
+}
