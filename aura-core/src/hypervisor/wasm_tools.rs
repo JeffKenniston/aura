@@ -1,15 +1,17 @@
 use rusqlite::Connection;
 use std::error::Error;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub struct WasmTools;
 
 impl WasmTools {
     pub fn fs_read(path_str: &str) -> Result<String, Box<dyn Error>> {
         let path = Path::new(path_str);
-        if !path.starts_with("/home/jeff/aura") {
-            return Err("Path traversal blocked: Access restricted to /home/jeff/aura".into());
+        let current_dir = std::env::current_dir()?;
+        let allowed_prefix = current_dir.to_str().ok_or("Invalid UTF-8 in current directory path")?.to_string();
+        if !path.starts_with(&allowed_prefix) {
+            return Err(format!("Path traversal blocked: Access restricted to {}", allowed_prefix).into());
         }
         if path.components().any(|c| c.as_os_str() == "..") {
             return Err("Path traversal blocked: .. is not allowed".into());
@@ -19,8 +21,10 @@ impl WasmTools {
 
     pub fn fs_write(path_str: &str, content: &str) -> Result<(), Box<dyn Error>> {
         let path = Path::new(path_str);
-        if !path.starts_with("/home/jeff/aura") {
-            return Err("Path traversal blocked: Access restricted to /home/jeff/aura".into());
+        let current_dir = std::env::current_dir()?;
+        let allowed_prefix = current_dir.to_str().ok_or("Invalid UTF-8 in current directory path")?.to_string();
+        if !path.starts_with(&allowed_prefix) {
+            return Err(format!("Path traversal blocked: Access restricted to {}", allowed_prefix).into());
         }
         if path.components().any(|c| c.as_os_str() == "..") {
             return Err("Path traversal blocked: .. is not allowed".into());
@@ -30,8 +34,9 @@ impl WasmTools {
     }
 
     pub fn analyze_blast_radius(target_symbol_id: &str) -> Result<u32, Box<dyn Error>> {
-        let db_path = "/home/jeff/aura/.agents/knowledge_graph.sqlite";
-        if !Path::new(db_path).exists() {
+        let base_path = std::env::current_dir()?;
+        let db_path = base_path.join(".agents/knowledge_graph.sqlite");
+        if !db_path.exists() {
             return Ok(0); // If no DB, blast radius is 0
         }
         let conn = Connection::open(db_path)?;
