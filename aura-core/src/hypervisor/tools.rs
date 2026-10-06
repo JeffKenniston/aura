@@ -105,3 +105,41 @@ impl ComputerEnvironment {
         Ok(format!("Clicked at {}, {}", x, y))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bash_environment_new() {
+        let env = BashEnvironment::new("test-id", "test-svid");
+        assert_eq!(env.vm.id, "test-id");
+        assert_eq!(env.vm.svid, "test-svid");
+        assert_eq!(
+            env.vm.socket_path.to_str().unwrap(),
+            "/srv/jailer/firecracker/test-id/root/run/firecracker.socket"
+        );
+    }
+
+    #[test]
+    fn test_browser_environment_new() {
+        let env = BrowserEnvironment::new("test-id", "test-svid");
+        assert_eq!(env.vm.id, "test-id");
+        assert_eq!(env.vm.svid, "test-svid");
+        assert_eq!(
+            env.vm.socket_path.to_str().unwrap(),
+            "/srv/jailer/firecracker/test-id/root/run/firecracker.socket"
+        );
+    }
+
+    #[test]
+    fn test_computer_environment_new() {
+        let env = ComputerEnvironment::new("test-id", "test-svid");
+        assert_eq!(env.vm.id, "test-id");
+        assert_eq!(env.vm.svid, "test-svid");
+        assert_eq!(
+            env.vm.socket_path.to_str().unwrap(),
+            "/srv/jailer/firecracker/test-id/root/run/firecracker.socket"
+        );
+    }
+}
