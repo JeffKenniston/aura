@@ -6,10 +6,15 @@ use std::path::{Path, PathBuf};
 pub struct WasmTools;
 
 impl WasmTools {
+    fn get_base_dir() -> String {
+        std::env::var("AURA_BASE_DIR").unwrap_or_else(|_| "/home/jeff/aura".to_string())
+    }
+
     pub fn fs_read(path_str: &str) -> Result<String, Box<dyn Error>> {
         let path = Path::new(path_str);
-        if !path.starts_with("/home/jeff/aura") {
-            return Err("Path traversal blocked: Access restricted to /home/jeff/aura".into());
+        let base_dir = Self::get_base_dir();
+        if !path.starts_with(&base_dir) {
+            return Err(format!("Path traversal blocked: Access restricted to {}", base_dir).into());
         }
         if path.components().any(|c| c.as_os_str() == "..") {
             return Err("Path traversal blocked: .. is not allowed".into());
@@ -19,8 +24,9 @@ impl WasmTools {
 
     pub fn fs_write(path_str: &str, content: &str) -> Result<(), Box<dyn Error>> {
         let path = Path::new(path_str);
-        if !path.starts_with("/home/jeff/aura") {
-            return Err("Path traversal blocked: Access restricted to /home/jeff/aura".into());
+        let base_dir = Self::get_base_dir();
+        if !path.starts_with(&base_dir) {
+            return Err(format!("Path traversal blocked: Access restricted to {}", base_dir).into());
         }
         if path.components().any(|c| c.as_os_str() == "..") {
             return Err("Path traversal blocked: .. is not allowed".into());
@@ -67,6 +73,56 @@ impl WasmTools {
             uuid::Uuid::new_v4()
         );
         Ok(svid)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+    use std::env;
+    use serial_test::serial;
+
+    #[test]
+    #[serial]
+    fn test_wasm_fs_write_success() {
+        let dir = tempdir().unwrap();
+        let base_path = dir.path().to_str().unwrap().to_string();
+        env::set_var("AURA_BASE_DIR", &base_path);
+
+        let file_path = format!("{}/test.txt", base_path);
+        let content = "hello world";
+
+        let result = WasmTools::fs_write(&file_path, content);
+        assert!(result.is_ok());
+
+        let read_content = std::fs::read_to_string(&file_path).unwrap();
+        assert_eq!(read_content, content);
+    }
+
+    #[test]
+    #[serial]
+    fn test_wasm_fs_write_blocked_outside_base() {
+        let dir = tempdir().unwrap();
+        let base_path = dir.path().to_str().unwrap().to_string();
+        env::set_var("AURA_BASE_DIR", &base_path);
+
+        let result = WasmTools::fs_write("/tmp/outside_test.txt", "content");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Path traversal blocked"));
+    }
+
+    #[test]
+    #[serial]
+    fn test_wasm_fs_write_blocked_traversal() {
+        let dir = tempdir().unwrap();
+        let base_path = dir.path().to_str().unwrap().to_string();
+        env::set_var("AURA_BASE_DIR", &base_path);
+
+        let file_path = format!("{}/../test.txt", base_path);
+        let result = WasmTools::fs_write(&file_path, "content");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains(".. is not allowed"));
     }
 }
 
