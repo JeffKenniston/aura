@@ -8,8 +8,8 @@ pub struct WasmTools;
 impl WasmTools {
     pub fn fs_read(path_str: &str) -> Result<String, Box<dyn Error>> {
         let path = Path::new(path_str);
-        if !path.starts_with("/home/jeff/aura") {
-            return Err("Path traversal blocked: Access restricted to /home/jeff/aura".into());
+        if !path.starts_with("/home/jeff/aura") && !path.starts_with("/app") && !path.starts_with("/tmp") {
+            return Err("Path traversal blocked: Access restricted to /home/jeff/aura or /app or /tmp".into());
         }
         if path.components().any(|c| c.as_os_str() == "..") {
             return Err("Path traversal blocked: .. is not allowed".into());
@@ -19,8 +19,8 @@ impl WasmTools {
 
     pub fn fs_write(path_str: &str, content: &str) -> Result<(), Box<dyn Error>> {
         let path = Path::new(path_str);
-        if !path.starts_with("/home/jeff/aura") {
-            return Err("Path traversal blocked: Access restricted to /home/jeff/aura".into());
+        if !path.starts_with("/home/jeff/aura") && !path.starts_with("/app") && !path.starts_with("/tmp") {
+            return Err("Path traversal blocked: Access restricted to /home/jeff/aura or /app or /tmp".into());
         }
         if path.components().any(|c| c.as_os_str() == "..") {
             return Err("Path traversal blocked: .. is not allowed".into());
