@@ -43,9 +43,14 @@ pub async fn start_webhook_listener(
                                 // The Python client subscribes to: prefix + /interactions/{interaction_id}/status
                                 let sub_topic =
                                     format!("interactions/{}/status", payload.interaction_id);
-                                let json_payload = serde_json::to_string(&payload).unwrap();
-
-                                let _ = bus_clone.publish(&sub_topic, json_payload).await;
+                                match serde_json::to_string(&payload) {
+                                    Ok(json_payload) => {
+                                        let _ = bus_clone.publish(&sub_topic, json_payload).await;
+                                    }
+                                    Err(e) => {
+                                        eprintln!("Failed to serialize webhook payload: {}", e);
+                                    }
+                                }
                             }
                         }
 
