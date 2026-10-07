@@ -8,24 +8,45 @@ pub struct WasmTools;
 impl WasmTools {
     pub fn fs_read(path_str: &str) -> Result<String, Box<dyn Error>> {
         let path = Path::new(path_str);
-        if !path.starts_with("/home/jeff/aura") {
+
+        // Use canonicalize to resolve symlinks and absolute paths
+        let canonical_path = fs::canonicalize(path)?;
+
+        if !canonical_path.starts_with("/home/jeff/aura") {
             return Err("Path traversal blocked: Access restricted to /home/jeff/aura".into());
         }
-        if path.components().any(|c| c.as_os_str() == "..") {
-            return Err("Path traversal blocked: .. is not allowed".into());
-        }
-        Ok(fs::read_to_string(path)?)
+
+        Ok(fs::read_to_string(canonical_path)?)
     }
 
     pub fn fs_write(path_str: &str, content: &str) -> Result<(), Box<dyn Error>> {
         let path = Path::new(path_str);
-        if !path.starts_with("/home/jeff/aura") {
+
+        // To canonicalize a file for writing, the file might not exist yet.
+        let parent = path.parent().unwrap_or_else(|| Path::new(""));
+        let canonical_parent = fs::canonicalize(parent)?;
+
+        if !canonical_parent.starts_with("/home/jeff/aura") {
             return Err("Path traversal blocked: Access restricted to /home/jeff/aura".into());
         }
-        if path.components().any(|c| c.as_os_str() == "..") {
-            return Err("Path traversal blocked: .. is not allowed".into());
+
+        // We can create the path by joining the canonical parent and the file name
+        let file_name = path.file_name().ok_or("Invalid file name")?;
+        let canonical_path = canonical_parent.join(file_name);
+
+        // Symlinks (both broken and existing) can point anywhere. If the path exists as a symlink,
+        // we should either refuse to overwrite it or resolve it fully.
+        if let Ok(metadata) = fs::symlink_metadata(&canonical_path) {
+            if metadata.is_symlink() {
+                // If it is a symlink, canonicalize it and check the actual path
+                let fully_canonical = fs::canonicalize(&canonical_path)?;
+                if !fully_canonical.starts_with("/home/jeff/aura") {
+                    return Err("Path traversal blocked: Access restricted to /home/jeff/aura".into());
+                }
+            }
         }
-        fs::write(path, content)?;
+
+        fs::write(canonical_path, content)?;
         Ok(())
     }
 
