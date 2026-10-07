@@ -1,6 +1,0 @@
-{
-  "api": "gemini-interactions",
-  "maxContextTokens": 1000000,
-  "compressionTriggerRatio": 0.85,
-  "summaryPrompt": "Summarize the key architectural decisions and current state concisely."
-}

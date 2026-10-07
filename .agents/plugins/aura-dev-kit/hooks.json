@@ -1,0 +1,30 @@
+{
+  "rust-validation": {
+    "PostToolUse": [
+      {
+        "matcher": "edit_file|write_to_file|patch_file|replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/rust-lint.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  },
+  "python-validation": {
+    "PostToolUse": [
+      {
+        "matcher": "edit_file|write_to_file|patch_file|replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/python-lint.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
