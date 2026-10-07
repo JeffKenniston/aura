@@ -53,12 +53,7 @@ Before any architectural change, refactoring, or implementation is applied, the 
    - If an operation, build, or test fails to resolve within **three iterations**, the agent MUST immediately halt its autonomous loop.
    - The agent is forbidden from attempting speculative permutations. It must pause and present a concise diagnostic summary and clarifying question to the developer.
 
-2. **Slash Command Conventions**:
-   - `/plan`: Mandatory command before executing multi-file modifications. Requires drafting a structured implementation specification with risk assessment and verification criteria.
-   - `/grill-me`: Triggers an active interrogation session where the agent actively questions the developer regarding ambiguous requirements, failure modes, and architectural trade-offs.
-   - `/boost`: Multi-agent orchestration command reserved strictly for complex Tier 3 tasks requiring parallel subagent swarms. Prohibited for routine operations to prevent token exhaustion.
-
-3. **Context Hygiene**:
+2. **Context Hygiene**:
    - Large configurations, multi-step execution workflows, and directory-specific constraints are strictly modularized into `.agents/rules/`, `.agents/skills/`, and `.agents/agents/` to prevent context saturation.
    - Heavy directories (`target/`, `.venv/`, `node_modules/`, `rootfs/`, `*.sqlite`) are ignored via `.ignore` and `.cursorignore`.
 
