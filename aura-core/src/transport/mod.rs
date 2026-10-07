@@ -28,3 +28,27 @@ pub async fn init_http3_multiplexer() -> Result<(), Box<dyn std::error::Error>> 
     http3_mux::start_quic_listener().await?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::ErrorKind;
+
+    #[tokio::test]
+    async fn test_init_http3_multiplexer() {
+        let result = init_http3_multiplexer().await;
+        match result {
+            Ok(_) => {}
+            Err(e) => {
+                // To avoid flaky tests when run concurrently with other tests binding to 4433
+                if let Some(io_err) = e.downcast_ref::<std::io::Error>() {
+                    if io_err.kind() == ErrorKind::AddrInUse {
+                        println!("Address already in use, skipping test");
+                        return;
+                    }
+                }
+                panic!("init_http3_multiplexer failed: {}", e);
+            }
+        }
+    }
+}
