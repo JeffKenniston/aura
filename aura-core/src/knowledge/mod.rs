@@ -112,36 +112,18 @@ impl KnowledgeGraph {
 
     /// Pass 3: Global Linking Pass (Reconcile cross-file references)
     pub fn link_global_references(&self) -> Result<usize> {
-        // Find references that match a known local definition
-        let mut stmt = self.conn.prepare(
-            "SELECT r.file_path, r.reference_name, ld.file_path, ld.symbol_name 
+        // Find references that match a known local definition and insert into symbol_references
+        let linked_count = self.conn.execute(
+            "INSERT INTO symbol_references (caller_id, callee_id)
+             SELECT
+                 r.file_path || '::' || r.reference_name,
+                 ld.file_path || '::' || ld.symbol_name
              FROM symbol_usages r 
              JOIN local_definitions ld ON r.reference_name = ld.symbol_name 
-             WHERE r.file_path != ld.file_path",
+             WHERE r.file_path != ld.file_path
+             ON CONFLICT DO NOTHING",
+            [],
         )?;
-
-        let links_iter = stmt.query_map([], |row| {
-            let caller_file: String = row.get(0)?;
-            let reference_name: String = row.get(1)?;
-            let callee_file: String = row.get(2)?;
-            let symbol_name: String = row.get(3)?;
-            Ok((
-                format!("{}::{}", caller_file, reference_name),
-                format!("{}::{}", callee_file, symbol_name),
-            ))
-        })?;
-
-        let mut linked_count = 0;
-        for link in links_iter {
-            if let Ok((caller, callee)) = link {
-                // Insert into symbol_references
-                self.conn.execute(
-                    "INSERT INTO symbol_references (caller_id, callee_id) VALUES (?1, ?2) ON CONFLICT DO NOTHING",
-                    params![caller, callee],
-                )?;
-                linked_count += 1;
-            }
-        }
         Ok(linked_count)
     }
 
