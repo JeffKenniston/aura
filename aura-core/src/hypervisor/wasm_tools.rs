@@ -82,3 +82,29 @@ pub fn bind_to_linker(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_mint_ephemeral_svid() {
+        let agent_name = "test-agent";
+
+        let svid1 = WasmTools::mint_ephemeral_svid(agent_name).unwrap();
+        let svid2 = WasmTools::mint_ephemeral_svid(agent_name).unwrap();
+
+        // Check format
+        let prefix = format!("spiffe://aura.local/ephemeral/{}/", agent_name);
+        assert!(svid1.starts_with(&prefix));
+
+        // Check UUID
+        let uuid_str1 = svid1.strip_prefix(&prefix).unwrap();
+        let uuid1 = uuid::Uuid::from_str(uuid_str1).expect("Should be valid UUID");
+        assert_eq!(uuid1.get_version(), Some(uuid::Version::Random));
+
+        // Check uniqueness
+        assert_ne!(svid1, svid2);
+    }
+}
