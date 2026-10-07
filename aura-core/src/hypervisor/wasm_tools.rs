@@ -36,6 +36,13 @@ impl WasmTools {
         }
         let conn = Connection::open(db_path)?;
 
+        Self::analyze_blast_radius_internal(target_symbol_id, &conn)
+    }
+
+    pub fn analyze_blast_radius_internal(
+        target_symbol_id: &str,
+        conn: &Connection,
+    ) -> Result<u32, Box<dyn Error>> {
         let query = r#"
             WITH RECURSIVE CallChain AS (
                 SELECT caller_id, callee_id, 1 AS depth
@@ -81,4 +88,88 @@ pub fn bind_to_linker(
     // We would do linker.root().func_wrap("wasi:tools/filesystem", "read", |...|) here.
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    #[test]
+    fn test_analyze_blast_radius_internal() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute(
+            "CREATE TABLE symbol_references (
+                caller_id TEXT,
+                callee_id TEXT
+            )",
+            [],
+        )
+        .unwrap();
+
+        // Setup test data
+        // A calls B
+        // C calls B
+        // D calls A
+        // E calls D
+        // F calls G (unrelated)
+        // H calls H (cycle)
+        // I calls J, J calls I (cycle)
+        // J calls B
+        let insertions = [
+            ("A", "B"),
+            ("C", "B"),
+            ("D", "A"),
+            ("E", "D"),
+            ("F", "G"),
+            ("H", "H"),
+            ("I", "J"),
+            ("J", "I"),
+            ("J", "B"),
+        ];
+
+        for (caller, callee) in insertions {
+            conn.execute(
+                "INSERT INTO symbol_references (caller_id, callee_id) VALUES (?1, ?2)",
+                [caller, callee],
+            )
+            .unwrap();
+        }
+
+        // Test cases
+
+        // 1. Target B
+        // Callers: A, C, J directly call B.
+        // D calls A, E calls D. (E -> D -> A -> B)
+        // I calls J, J calls I, so I calls J calls B.
+        // Callers of B: A, C, J, D, E, I (6 distinct callers)
+        let blast_radius = WasmTools::analyze_blast_radius_internal("B", &conn).unwrap();
+        assert_eq!(blast_radius, 6);
+
+        // 2. Target A
+        // Callers: D directly calls A. E calls D.
+        // Callers of A: D, E (2 distinct callers)
+        let blast_radius = WasmTools::analyze_blast_radius_internal("A", &conn).unwrap();
+        assert_eq!(blast_radius, 2);
+
+        // 3. Target G (unrelated)
+        // Callers: F directly calls G.
+        let blast_radius = WasmTools::analyze_blast_radius_internal("G", &conn).unwrap();
+        assert_eq!(blast_radius, 1);
+
+        // 4. Target H (cycle)
+        // Callers: H directly calls H.
+        let blast_radius = WasmTools::analyze_blast_radius_internal("H", &conn).unwrap();
+        assert_eq!(blast_radius, 1);
+
+        // 5. Target J (cycle)
+        // Callers: I calls J, J calls I.
+        // Callers of J: I, J (2 distinct callers)
+        let blast_radius = WasmTools::analyze_blast_radius_internal("J", &conn).unwrap();
+        assert_eq!(blast_radius, 2);
+
+        // 6. Target Z (no callers)
+        let blast_radius = WasmTools::analyze_blast_radius_internal("Z", &conn).unwrap();
+        assert_eq!(blast_radius, 0);
+    }
 }
