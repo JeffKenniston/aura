@@ -38,3 +38,4 @@ streaming-iterator = "0.1.9"
 [dev-dependencies]
 wat = "1.261.0"
 tempfile = "3.10"
+serial_test = "4.0.1"
