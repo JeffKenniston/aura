@@ -116,3 +116,113 @@ impl FirecrackerVm {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::Path;
+    use tempfile::tempdir;
+    use std::sync::Mutex;
+    use std::env;
+
+    // Use a mutex to prevent environment variable changes from affecting other tests running concurrently
+    static PATH_MUTEX: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn test_firecracker_new() {
+        let vm = FirecrackerVm::new("test-vm-id", "spiffe://test/vm");
+        assert_eq!(vm.id, "test-vm-id");
+        assert_eq!(vm.svid, "spiffe://test/vm");
+        assert_eq!(
+            vm.socket_path.to_str().unwrap(),
+            "/srv/jailer/firecracker/test-vm-id/root/run/firecracker.socket"
+        );
+    }
+
+    #[test]
+    fn test_start_jailer_missing_executable() {
+        // Lock to ensure exclusive access to environment variable
+        let _lock = PATH_MUTEX.lock().unwrap();
+
+        // Save original path
+        let original_path = env::var("PATH").unwrap_or_else(|_| "".to_string());
+
+        // Create an empty temporary directory
+        let temp_dir = tempdir().unwrap();
+
+        // Set PATH to just the empty directory, so `jailer` is definitely not found
+        env::set_var("PATH", temp_dir.path());
+
+        let vm = FirecrackerVm::new("test-vm-id", "spiffe://test/vm");
+        let result = vm.start_jailer();
+
+        // Check if the expected error occurs
+        assert!(result.is_err());
+        if let Err(e) = result {
+            let io_err = e.downcast_ref::<std::io::Error>();
+            assert!(io_err.is_some(), "Expected std::io::Error, got {:?}", e);
+            assert_eq!(
+                io_err.unwrap().kind(),
+                std::io::ErrorKind::NotFound,
+                "Expected NotFound error, got {:?}",
+                io_err.unwrap().kind()
+            );
+        }
+
+        // Restore original path
+        env::set_var("PATH", original_path);
+    }
+
+    #[test]
+    fn test_start_jailer_success() {
+        // Lock to ensure exclusive access to environment variable
+        let _lock = PATH_MUTEX.lock().unwrap();
+
+        let original_path = env::var("PATH").unwrap_or_else(|_| "".to_string());
+
+        // Create a temporary directory for our mock jailer
+        let temp_dir = tempdir().unwrap();
+        let mock_jailer_path = temp_dir.path().join("jailer");
+        let mock_output_path = temp_dir.path().join("jailer_output.txt");
+
+        // Create a mock shell script that records its arguments
+        let script_content = format!(
+            "#!/bin/sh\n\
+             echo \"$@\" > {}\n\
+             exit 0\n",
+            mock_output_path.to_str().unwrap()
+        );
+        fs::write(&mock_jailer_path, script_content).unwrap();
+
+        // Make the script executable
+        let mut perms = fs::metadata(&mock_jailer_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&mock_jailer_path, perms).unwrap();
+
+        // Update PATH to include the temp directory first
+        let new_path = format!("{}:{}", temp_dir.path().to_str().unwrap(), original_path);
+        env::set_var("PATH", new_path);
+
+        let vm = FirecrackerVm::new("test-vm-id", "spiffe://test/vm");
+        let result = vm.start_jailer();
+
+        // Check that the command succeeded
+        assert!(result.is_ok(), "Expected Ok, got {:?}", result);
+
+        // Verify the mock script was executed and arguments were passed correctly
+        let args_output = fs::read_to_string(&mock_output_path)
+            .expect("Failed to read mock jailer output file")
+            .trim()
+            .to_string();
+
+        assert_eq!(
+            args_output,
+            "--id test-vm-id --exec-file /usr/local/bin/firecracker --uid 1000 --gid 1000 --chroot-base-dir /srv/jailer --daemonize"
+        );
+
+        // Restore original path
+        env::set_var("PATH", original_path);
+    }
+}
