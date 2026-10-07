@@ -1,9 +1,17 @@
 #!/bin/bash
-# Move to workspace root since hooks run in the directory containing hooks.json (.agents)
-cd ../../..
+# Parse the hook input from stdin
+INPUT=$(cat)
+TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcriptPath')
+STEP_IDX=$(echo "$INPUT" | jq -r '.stepIdx')
 
-# Redirect stdout to stderr so that the only stdout is the JSON response
-cargo fmt --check --quiet 1>&2 || cargo check --quiet 1>&2
+# Extract TargetFile arguments from the given step in the transcript
+# and check if any end with .rs
+RS_MODIFIED=$(jq -r "select(.step_index == ${STEP_IDX} and .type == \"PLANNER_RESPONSE\") | .tool_calls[]? | .args.TargetFile? | select(. != null)" "$TRANSCRIPT" | grep "\.rs$")
 
-# Output empty JSON object to satisfy the PostToolUse contract
+if [ -n "$RS_MODIFIED" ]; then
+    cd ../../..
+    cargo fmt --check --quiet 1>&2 || cargo check --quiet 1>&2
+fi
+
+# Always output an empty JSON object to satisfy the PostToolUse contract
 echo "{}"

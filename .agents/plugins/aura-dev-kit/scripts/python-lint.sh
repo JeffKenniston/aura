@@ -1,9 +1,17 @@
 #!/bin/bash
-# Move to workspace root since hooks run in the directory containing hooks.json (.agents)
-cd ../../..
+# Parse the hook input from stdin
+INPUT=$(cat)
+TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcriptPath')
+STEP_IDX=$(echo "$INPUT" | jq -r '.stepIdx')
 
-# Redirect stdout to stderr so that the only stdout is the JSON response
-ruff check --quiet . 1>&2 && ruff format --check --quiet . 1>&2
+# Extract TargetFile arguments from the given step in the transcript
+# and check if any end with .py
+PY_MODIFIED=$(jq -r "select(.step_index == ${STEP_IDX} and .type == \"PLANNER_RESPONSE\") | .tool_calls[]? | .args.TargetFile? | select(. != null)" "$TRANSCRIPT" | grep "\.py$")
 
-# Output empty JSON object to satisfy the PostToolUse contract
+if [ -n "$PY_MODIFIED" ]; then
+    cd ../../..
+    ruff check --quiet . 1>&2 && ruff format --check --quiet . 1>&2
+fi
+
+# Always output an empty JSON object to satisfy the PostToolUse contract
 echo "{}"
