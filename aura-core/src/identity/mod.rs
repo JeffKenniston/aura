@@ -54,3 +54,35 @@ pub async fn fetch_svid() -> Result<Svid, Box<dyn std::error::Error>> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+
+    #[tokio::test]
+    #[serial]
+    async fn test_fetch_svid_fallback() {
+        // Save the old socket environment variable to restore it after the test
+        let old_socket = std::env::var("SPIFFE_ENDPOINT_SOCKET").ok();
+
+        // Force the connection to fail by providing a non-existent socket
+        std::env::set_var("SPIFFE_ENDPOINT_SOCKET", "unix:///tmp/nonexistent_spire.sock");
+
+        let svid_result = fetch_svid().await;
+        assert!(svid_result.is_ok());
+
+        let svid = svid_result.unwrap();
+        assert_eq!(svid.id, "spiffe://aura.local/host");
+        assert!(svid.scopes.contains("fs:read"));
+        assert!(svid.scopes.contains("fs:write"));
+        assert!(svid.scopes.contains("net:bind"));
+
+        // Restore the old socket environment variable
+        if let Some(socket) = old_socket {
+            std::env::set_var("SPIFFE_ENDPOINT_SOCKET", socket);
+        } else {
+            std::env::remove_var("SPIFFE_ENDPOINT_SOCKET");
+        }
+    }
+}
