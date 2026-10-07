@@ -12,6 +12,25 @@ impl BashEnvironment {
         }
     }
 
+    pub fn validate_command(command: &str) -> Result<(), Box<dyn Error>> {
+        // Sandbox Isolation Validation for malicious payloads
+        let tokens = match shlex::split(command) {
+            Some(t) => t,
+            None => {
+                return Err(
+                    "Jailer/Seccomp Blocked Malicious Payload: Invalid shell command".into(),
+                )
+            }
+        };
+
+        for token in tokens {
+            if token.contains("/root/") || token.contains("escape") {
+                return Err("Jailer/Seccomp Blocked Malicious Payload".into());
+            }
+        }
+        Ok(())
+    }
+
     pub fn execute(&self, command: &str) -> Result<String, Box<dyn Error>> {
         let start = std::time::Instant::now();
         self.vm.start_jailer()?;
@@ -29,10 +48,7 @@ impl BashEnvironment {
             println!("Bash microVM booted in {:?}", boot_latency);
         }
 
-        // Sandbox Isolation Validation for malicious payloads
-        if command.contains("/root/") || command.contains("escape") {
-            return Err("Jailer/Seccomp Blocked Malicious Payload".into());
-        }
+        Self::validate_command(command)?;
 
         println!("Executing Bash command: {}", command);
 
@@ -103,5 +119,26 @@ impl ComputerEnvironment {
         );
 
         Ok(format!("Clicked at {}, {}", x, y))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bash_command_validation() {
+        // Valid commands
+        assert!(BashEnvironment::validate_command("echo hello").is_ok());
+        assert!(BashEnvironment::validate_command("ls -la /var/log").is_ok());
+
+        // Simple malicious commands
+        assert!(BashEnvironment::validate_command("ls /root/").is_err());
+        assert!(BashEnvironment::validate_command("echo escape").is_err());
+
+        // Commands using shell quoting for evasion
+        assert!(BashEnvironment::validate_command("ls /ro\"o\"t/").is_err());
+        assert!(BashEnvironment::validate_command("ls /ro'o't/").is_err());
+        assert!(BashEnvironment::validate_command("echo es\"cap\"e").is_err());
     }
 }

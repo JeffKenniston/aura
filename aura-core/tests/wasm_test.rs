@@ -4,7 +4,7 @@ use aura_core::hypervisor::wasm_tools::WasmTools;
 fn test_wasm_fs_write_read() {
     let path = "/home/jeff/aura/tests/test_wasm_fs.txt";
     let content = "Hello WebAssembly";
-    
+
     // Write
     let write_res = WasmTools::fs_write(path, content);
     assert!(write_res.is_ok(), "Failed to write file via WASM tools");
