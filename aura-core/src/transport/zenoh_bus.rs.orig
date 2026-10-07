@@ -251,10 +251,7 @@ impl ZenohBus {
                 if let Ok(tool_req) = serde_json::from_str::<ToolPayload>(&payload_str) {
                     println!("Received tool execution: {:?}", tool_req);
 
-                    // Offload blocking system I/O (fs operations, sqlite queries, command execution) to a background thread
-                    let tool_id = tool_req.tool_id.clone();
-                    let result_str = tokio::task::spawn_blocking(move || {
-                        match tool_req.tool_type.as_str() {
+                    let result_str = match tool_req.tool_type.as_str() {
                         "bash" => {
                             let env = crate::hypervisor::tools::BashEnvironment::new(
                                 &tool_req.tool_id,
@@ -352,11 +349,10 @@ impl ZenohBus {
                             .unwrap_or_else(|e| format!("Ephemeral Tunnel error: {}", e))
                         }
                         _ => format!("Unknown tool type: {}", tool_req.tool_type),
-                        }
-                    }).await.unwrap_or_else(|e| format!("Tokio spawn_blocking error: {}", e));
+                    };
 
                     let res = ToolResult {
-                        tool_id,
+                        tool_id: tool_req.tool_id,
                         result: result_str,
                     };
 

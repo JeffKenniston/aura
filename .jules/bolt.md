@@ -1,0 +1,3 @@
+## 2023-10-27 - Offloaded Zenoh Tools Listener to Blocking Task
+**Learning:** Zenoh bus operations in `aura-core`, specifically those that handle tools (`bash`, `browser`, `computer`, `filesystem`, etc.), execute blocking system calls directly inside the `tokio::select!` event loop or normal `tokio::spawn` bounds. Blocking operations in async workers cause thread starvation and delay other microservices.
+**Action:** Use `tokio::task::spawn_blocking` to wrap blocking API interactions in `aura-core` listeners (like `ZenohBus::start_tools_listener`). Always measure overhead manually since Rust `async` executors don't automatically isolate compute-heavy or disk-heavy workloads.
