@@ -22,21 +22,41 @@ impl<'a> Indexer<'a> {
             .git_ignore(true)
             .build();
 
-        let files: Vec<PathBuf> = walker
-            .filter_map(|entry| entry.ok())
-            .filter(|entry| entry.file_type().map_or(false, |ft| ft.is_file()))
-            .map(|entry| entry.path().to_path_buf())
-            .collect();
+        let mut files_to_hash = Vec::new();
 
-        // 1. Rayon parallel iteration to compute BLAKE3 hashes
-        let hashed_files: Vec<_> = files
+        for entry in walker.filter_map(|e| e.ok()) {
+            if entry.file_type().map_or(false, |ft| ft.is_file()) {
+                let path = entry.path().to_path_buf();
+                let path_str = path.to_string_lossy().to_string();
+
+                let metadata = entry.metadata().ok();
+                let mtime = metadata
+                    .and_then(|m| m.modified().ok())
+                    .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0);
+
+                // Synchronous cache check before hashing
+                let needs_hash = match self.kg.get_file_state(&path_str) {
+                    Ok(Some((_, last_modified))) => last_modified < mtime || mtime == 0,
+                    _ => true,
+                };
+
+                if needs_hash {
+                    files_to_hash.push((path, path_str, mtime));
+                }
+            }
+        }
+
+        // 1. Rayon parallel iteration to compute BLAKE3 hashes only for changed files
+        let hashed_files: Vec<_> = files_to_hash
             .into_par_iter()
-            .filter_map(|path| {
+            .filter_map(|(path, path_str, mtime)| {
                 if let Ok(content) = fs::read(&path) {
                     let mut hasher = blake3::Hasher::new();
                     hasher.update(&content);
                     let current_hash = hasher.finalize().to_hex().to_string();
-                    Some((path, content, current_hash))
+                    Some((path, path_str, content, current_hash, mtime))
                 } else {
                     None
                 }
@@ -44,19 +64,17 @@ impl<'a> Indexer<'a> {
             .collect();
 
         // 2. Synchronous iteration for SQLite updates and CST extraction
-        for (path, content, current_hash) in hashed_files {
-            let path_str = path.to_string_lossy().to_string();
-
-            let needs_update = match self.kg.get_file_hash(&path_str) {
-                Ok(Some(old_hash)) => old_hash != current_hash,
+        for (path, path_str, content, current_hash, mtime) in hashed_files {
+            let needs_update = match self.kg.get_file_state(&path_str) {
+                Ok(Some((old_hash, _))) => old_hash != current_hash,
                 Ok(None) => true,
                 Err(_) => false,
             };
 
-            if needs_update {
-                // Update cache
-                let _ = self.kg.update_file_hash(&path_str, &current_hash);
+            // We update the state (mtime and hash) even if hash hasn't changed, to avoid reading it again
+            let _ = self.kg.update_file_state(&path_str, &current_hash, mtime);
 
+            if needs_update {
                 // Parse CST (simulated to just test compilation and structure)
                 self.extract_cst(&path, &content);
             }

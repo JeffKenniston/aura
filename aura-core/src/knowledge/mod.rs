@@ -35,10 +35,17 @@ impl KnowledgeGraph {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS file_hashes (
                 file_path TEXT PRIMARY KEY,
-                blake3_hash TEXT NOT NULL
+                blake3_hash TEXT NOT NULL,
+                last_modified INTEGER DEFAULT 0
             )",
             [],
         )?;
+
+        // For backward compatibility: safely try to add the column if it doesn't exist
+        let _ = conn.execute(
+            "ALTER TABLE file_hashes ADD COLUMN last_modified INTEGER DEFAULT 0",
+            [],
+        );
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS local_definitions (
@@ -147,8 +154,8 @@ impl KnowledgeGraph {
 
     pub fn update_file_hash(&self, file_path: &str, blake3_hash: &str) -> Result<()> {
         self.conn.execute(
-            "INSERT INTO file_hashes (file_path, blake3_hash) 
-             VALUES (?1, ?2) 
+            "INSERT INTO file_hashes (file_path, blake3_hash, last_modified)
+             VALUES (?1, ?2, 0)
              ON CONFLICT(file_path) DO UPDATE SET blake3_hash = excluded.blake3_hash",
             params![file_path, blake3_hash],
         )?;
@@ -162,6 +169,28 @@ impl KnowledgeGraph {
         let mut rows = stmt.query(params![file_path])?;
         if let Some(row) = rows.next()? {
             Ok(Some(row.get(0)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn update_file_state(&self, file_path: &str, blake3_hash: &str, last_modified: i64) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO file_hashes (file_path, blake3_hash, last_modified)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(file_path) DO UPDATE SET blake3_hash = excluded.blake3_hash, last_modified = excluded.last_modified",
+            params![file_path, blake3_hash, last_modified],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_file_state(&self, file_path: &str) -> Result<Option<(String, i64)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT blake3_hash, last_modified FROM file_hashes WHERE file_path = ?1")?;
+        let mut rows = stmt.query(params![file_path])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some((row.get(0)?, row.get(1)?)))
         } else {
             Ok(None)
         }
