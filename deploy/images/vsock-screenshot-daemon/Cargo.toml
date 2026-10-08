@@ -1,0 +1,14 @@
+[package]
+name = "vsock-screenshot-daemon"
+version = "0.1.0"
+edition = "2021"
+authors = ["Jeff Kenniston"]
+license = "Apache-2.0"
+description = "Lightweight X11 screenshot daemon piping PNG frames over AF_VSOCK to host"
+
+[workspace]
+
+[dependencies]
+x11rb = "0.14"
+png = "0.18"
+vsock = "0.5"

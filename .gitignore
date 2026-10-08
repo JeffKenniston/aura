@@ -1,31 +1,83 @@
-# Rust / Cargo
-/target/
-**/*.rs.bk
+# Aura Worktrees, Runtime Logs & Ephemeral Traces
+.aura/worktrees/
+.aura/logs/
+.aura/artifacts/
+.aura/traces/
 
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
+# Rust build outputs
+target/
+*.rlib
+**/*.rs.bk
+pkg/
+
+# Code Coverage and Profiling
+coverage/
+htmlcov/
+.coverage
+.coverage.*
+*.profraw
+*.profdata
+lcov.info
+
+# Python environments and caches
 .venv/
 venv/
 env/
+__pycache__/
+*.pyc
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.hypothesis/
+
+# MicroVM and Firecracker disk images
+rootfs/
+*.img
+*.ext4
+*.raw
+*.microvm
+firecracker.log
+jailer.log
+*.sock
+jailer/
+chroot/
+*.tap
+*.veth
+
+# Deploy / Image builder caches and outputs
+deploy/images/.cache/
+deploy/images/output/
+
+# Databases & logs
 *.sqlite
 *.sqlite3
+*.sqlite-shm
+*.sqlite-wal
 *.db
+*.log
+.agents/audit.log
 
-# Node.js
+# Node & package manager directories
 node_modules/
+.npm/
 
-# Workspaces / VM
-rootfs/
+# Documentation build outputs
+docs/_build/
+site/
+book/
 
-# Editor / OS
+# OS & Editor files
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 .DS_Store
-
-# Agent runtime logs and artifacts
-.aura/logs/
-.aura/artifacts/
+Thumbs.db

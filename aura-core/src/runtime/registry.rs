@@ -49,6 +49,32 @@ impl Registry {
     pub fn register(&mut self, tool_name: String, backend: RuntimeBackend) {
         self.tools.insert(tool_name, backend);
     }
+
+    /// Registers default sandbox tool backends based on specialized rootfs images (M2 Sandboxes).
+    pub fn register_default_sandboxes(&mut self, base_dir: Option<&str>) {
+        let base = base_dir.unwrap_or("/srv/jailer");
+        self.register(
+            "bash".to_string(),
+            RuntimeBackend::Firecracker(KernelConfig {
+                kernel_path: format!("{}/vmlinux.bin", base.trim_end_matches('/')),
+                rootfs_path: format!("{}/bash.ext4", base.trim_end_matches('/')),
+            }),
+        );
+        self.register(
+            "browser".to_string(),
+            RuntimeBackend::Firecracker(KernelConfig {
+                kernel_path: format!("{}/vmlinux.bin", base.trim_end_matches('/')),
+                rootfs_path: format!("{}/browser.ext4", base.trim_end_matches('/')),
+            }),
+        );
+        self.register(
+            "computer".to_string(),
+            RuntimeBackend::Firecracker(KernelConfig {
+                kernel_path: format!("{}/vmlinux.bin", base.trim_end_matches('/')),
+                rootfs_path: format!("{}/computer.ext4", base.trim_end_matches('/')),
+            }),
+        );
+    }
 }
 
 #[cfg(test)]
@@ -71,5 +97,41 @@ mod tests {
     fn test_registry_load() {
         let registry = Registry::load_from_config("test.toml").unwrap();
         assert!(registry.resolve("mock_tool").is_some());
+    }
+
+    #[test]
+    fn test_registry_default_sandboxes() {
+        let mut registry = Registry::new();
+        registry.register_default_sandboxes(Some("/srv/jailer/images"));
+
+        let bash = registry
+            .resolve("bash")
+            .expect("bash tool should be registered");
+        match bash {
+            RuntimeBackend::Firecracker(cfg) => {
+                assert_eq!(cfg.rootfs_path, "/srv/jailer/images/bash.ext4");
+            }
+            _ => panic!("Expected Firecracker backend for bash"),
+        }
+
+        let browser = registry
+            .resolve("browser")
+            .expect("browser tool should be registered");
+        match browser {
+            RuntimeBackend::Firecracker(cfg) => {
+                assert_eq!(cfg.rootfs_path, "/srv/jailer/images/browser.ext4");
+            }
+            _ => panic!("Expected Firecracker backend for browser"),
+        }
+
+        let computer = registry
+            .resolve("computer")
+            .expect("computer tool should be registered");
+        match computer {
+            RuntimeBackend::Firecracker(cfg) => {
+                assert_eq!(cfg.rootfs_path, "/srv/jailer/images/computer.ext4");
+            }
+            _ => panic!("Expected Firecracker backend for computer"),
+        }
     }
 }

@@ -251,12 +251,15 @@ pub struct HypervisorConfig {
     pub wasm: WasmConfig,
     #[serde(default)]
     pub firecracker: FirecrackerConfig,
+    #[serde(default)]
+    pub proxy: crate::hypervisor::proxy::EgressProxyConfig,
 }
 
 impl HypervisorConfig {
     pub fn validate(&self) -> Result<(), ConfigError> {
         self.wasm.validate()?;
         self.firecracker.validate()?;
+        self.proxy.validate().map_err(ConfigError::Validation)?;
         Ok(())
     }
 }
@@ -518,5 +521,14 @@ supervisor:
         let err = config.validate().unwrap_err();
         assert!(matches!(err, ConfigError::Validation(_)));
         assert!(err.to_string().contains("opt_level"));
+    }
+
+    #[test]
+    fn test_validation_rejects_empty_proxy_allowlist() {
+        let mut config = AuraConfig::default();
+        config.hypervisor.proxy.allowed_domains = vec![];
+        let err = config.validate().unwrap_err();
+        assert!(matches!(err, ConfigError::Validation(_)));
+        assert!(err.to_string().contains("allowed_domains"));
     }
 }

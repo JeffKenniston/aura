@@ -1,5 +1,3 @@
-# Cursor Context Hygiene Ignore Rules for Aura Development
-
 # Aura Worktrees, Runtime Logs & Ephemeral Traces
 .aura/worktrees/
 .aura/logs/
@@ -52,6 +50,10 @@ jailer/
 chroot/
 *.tap
 *.veth
+
+# Deploy / Image builder caches and outputs
+deploy/images/.cache/
+deploy/images/output/
 
 # Databases & logs
 *.sqlite

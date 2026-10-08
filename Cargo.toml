@@ -3,6 +3,9 @@ members = [
     "aura-core",
     "aura-cli"
 ]
+exclude = [
+    "tools"
+]
 resolver = "2"
 
 [workspace.package]

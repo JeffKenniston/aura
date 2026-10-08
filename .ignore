@@ -1,15 +1,13 @@
-# Context Hygiene Ignore Rules for Antigravity & Aura Development
-
 # Aura Worktrees, Runtime Logs & Ephemeral Traces
 .aura/worktrees/
 .aura/logs/
 .aura/artifacts/
 .aura/traces/
 
-# Rust build artifacts
+# Rust build outputs
 target/
-**/*.rs.bk
 *.rlib
+**/*.rs.bk
 pkg/
 
 # Code Coverage and Profiling
@@ -21,11 +19,12 @@ htmlcov/
 *.profdata
 lcov.info
 
-# Python cache and virtual environments
+# Python environments and caches
 .venv/
 venv/
 env/
 __pycache__/
+*.pyc
 *.py[cod]
 *$py.class
 *.egg-info/
@@ -38,7 +37,7 @@ dist/
 .nox/
 .hypothesis/
 
-# MicroVM, Kernel & Jailer artifacts
+# MicroVM and Firecracker disk images
 rootfs/
 *.img
 *.ext4
@@ -52,12 +51,18 @@ chroot/
 *.tap
 *.veth
 
-# Knowledge graph and databases
+# Deploy / Image builder caches and outputs
+deploy/images/.cache/
+deploy/images/output/
+
+# Databases & logs
 *.sqlite
 *.sqlite3
 *.sqlite-shm
 *.sqlite-wal
 *.db
+*.log
+.agents/audit.log
 
 # Node & package manager directories
 node_modules/
@@ -68,11 +73,7 @@ docs/_build/
 site/
 book/
 
-# Logs and runtime diagnostics
-*.log
-.agents/audit.log
-
-# OS & Editor
+# OS & Editor files
 .vscode/
 .idea/
 *.swp

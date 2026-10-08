@@ -1,4 +1,5 @@
 pub mod firecracker;
+pub mod proxy;
 pub mod wasm;
 
 pub fn init_wasmtime() -> Result<(), Box<dyn std::error::Error>> {
