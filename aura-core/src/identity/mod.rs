@@ -67,7 +67,10 @@ mod tests {
         let old_socket = std::env::var("SPIFFE_ENDPOINT_SOCKET").ok();
 
         // Force the connection to fail by providing a non-existent socket
-        std::env::set_var("SPIFFE_ENDPOINT_SOCKET", "unix:///tmp/nonexistent_spire.sock");
+        std::env::set_var(
+            "SPIFFE_ENDPOINT_SOCKET",
+            "unix:///tmp/nonexistent_spire.sock",
+        );
 
         let svid_result = fetch_svid().await;
         assert!(svid_result.is_ok());

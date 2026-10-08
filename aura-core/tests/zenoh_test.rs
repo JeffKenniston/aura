@@ -1,5 +1,5 @@
-use aura_core::transport::zenoh_bus::ZenohBus;
 use aura_core::identity::Svid;
+use aura_core::transport::zenoh_bus::ZenohBus;
 use std::collections::HashSet;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]

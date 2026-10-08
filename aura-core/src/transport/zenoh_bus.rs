@@ -251,117 +251,137 @@ impl ZenohBus {
                 if let Ok(tool_req) = serde_json::from_str::<ToolPayload>(&payload_str) {
                     println!("Received tool execution: {:?}", tool_req);
 
-                    let result_str = match tool_req.tool_type.as_str() {
-                        "bash" => {
-                            let env = crate::hypervisor::tools::BashEnvironment::new(
-                                &tool_req.tool_id,
-                                "spiffe://aura.local/tool",
-                            );
-                            if let Some(cmd) =
-                                tool_req.payload.get("command").and_then(|c| c.as_str())
-                            {
-                                env.execute(cmd)
-                                    .unwrap_or_else(|e| format!("Bash error: {}", e))
-                            } else {
-                                "Missing command for bash tool".to_string()
-                            }
-                        }
-                        "browser" => {
-                            let env = crate::hypervisor::tools::BrowserEnvironment::new(
-                                &tool_req.tool_id,
-                                "spiffe://aura.local/tool",
-                            );
-                            if let Some(url) = tool_req.payload.get("url").and_then(|u| u.as_str())
-                            {
-                                env.navigate(url)
-                                    .unwrap_or_else(|e| format!("Browser error: {}", e))
-                            } else {
-                                "Missing url for browser tool".to_string()
-                            }
-                        }
-                        "computer" => {
-                            let env = crate::hypervisor::tools::ComputerEnvironment::new(
-                                &tool_req.tool_id,
-                                "spiffe://aura.local/tool",
-                            );
-                            let x = tool_req
-                                .payload
-                                .get("x")
-                                .and_then(|v| v.as_u64())
-                                .unwrap_or(0) as u32;
-                            let y = tool_req
-                                .payload
-                                .get("y")
-                                .and_then(|v| v.as_u64())
-                                .unwrap_or(0) as u32;
-                            env.click(x, y)
-                                .unwrap_or_else(|e| format!("Computer error: {}", e))
-                        }
-                        "filesystem" => {
-                            let action = tool_req
-                                .payload
-                                .get("action")
-                                .and_then(|a| a.as_str())
-                                .unwrap_or("");
-                            let path = tool_req
-                                .payload
-                                .get("path")
-                                .and_then(|p| p.as_str())
-                                .unwrap_or("");
-
-                            match action {
-                                "read" => crate::hypervisor::wasm_tools::WasmTools::fs_read(path)
-                                    .unwrap_or_else(|e| format!("FileSystem read error: {}", e)),
-                                "write" => {
-                                    let content = tool_req
-                                        .payload
-                                        .get("content")
-                                        .and_then(|c| c.as_str())
-                                        .unwrap_or("");
-                                    crate::hypervisor::wasm_tools::WasmTools::fs_write(
-                                        path, content,
-                                    )
-                                    .map(|_| "File written successfully".to_string())
-                                    .unwrap_or_else(|e| format!("FileSystem write error: {}", e))
+                    let session_clone = session_clone.clone();
+                    let prefix = prefix.clone();
+                    tokio::spawn(async move {
+                        let tool_id = tool_req.tool_id.clone();
+                        let result_str: String = tokio::task::spawn_blocking(
+                            move || match tool_req.tool_type.as_str() {
+                                "bash" => {
+                                    let env = crate::hypervisor::tools::BashEnvironment::new(
+                                        &tool_req.tool_id,
+                                        "spiffe://aura.local/tool",
+                                    );
+                                    if let Some(cmd) =
+                                        tool_req.payload.get("command").and_then(|c| c.as_str())
+                                    {
+                                        env.execute(cmd)
+                                            .unwrap_or_else(|e| format!("Bash error: {}", e))
+                                    } else {
+                                        "Missing command for bash tool".to_string()
+                                    }
                                 }
-                                _ => format!("Unknown filesystem action: {}", action),
-                            }
-                        }
-                        "ast-blast-radius" => {
-                            let target = tool_req
-                                .payload
-                                .get("target_symbol_id")
-                                .and_then(|t| t.as_str())
-                                .unwrap_or("");
-                            crate::hypervisor::wasm_tools::WasmTools::analyze_blast_radius(target)
-                                .map(|count| count.to_string())
-                                .unwrap_or_else(|e| format!("AST Blast Radius error: {}", e))
-                        }
-                        "ephemeral-tunnel" => {
-                            let agent_name = tool_req
-                                .payload
-                                .get("agent_name")
-                                .and_then(|a| a.as_str())
-                                .unwrap_or("unknown");
-                            crate::hypervisor::wasm_tools::WasmTools::mint_ephemeral_svid(
-                                agent_name,
-                            )
-                            .unwrap_or_else(|e| format!("Ephemeral Tunnel error: {}", e))
-                        }
-                        _ => format!("Unknown tool type: {}", tool_req.tool_type),
-                    };
+                                "browser" => {
+                                    let env = crate::hypervisor::tools::BrowserEnvironment::new(
+                                        &tool_req.tool_id,
+                                        "spiffe://aura.local/tool",
+                                    );
+                                    if let Some(url) =
+                                        tool_req.payload.get("url").and_then(|u| u.as_str())
+                                    {
+                                        env.navigate(url)
+                                            .unwrap_or_else(|e| format!("Browser error: {}", e))
+                                    } else {
+                                        "Missing url for browser tool".to_string()
+                                    }
+                                }
+                                "computer" => {
+                                    let env = crate::hypervisor::tools::ComputerEnvironment::new(
+                                        &tool_req.tool_id,
+                                        "spiffe://aura.local/tool",
+                                    );
+                                    let x = tool_req
+                                        .payload
+                                        .get("x")
+                                        .and_then(|v| v.as_u64())
+                                        .unwrap_or(0)
+                                        as u32;
+                                    let y = tool_req
+                                        .payload
+                                        .get("y")
+                                        .and_then(|v| v.as_u64())
+                                        .unwrap_or(0)
+                                        as u32;
+                                    env.click(x, y)
+                                        .unwrap_or_else(|e| format!("Computer error: {}", e))
+                                }
+                                "filesystem" => {
+                                    let action = tool_req
+                                        .payload
+                                        .get("action")
+                                        .and_then(|a| a.as_str())
+                                        .unwrap_or("");
+                                    let path = tool_req
+                                        .payload
+                                        .get("path")
+                                        .and_then(|p| p.as_str())
+                                        .unwrap_or("");
 
-                    let res = ToolResult {
-                        tool_id: tool_req.tool_id,
-                        result: result_str,
-                    };
+                                    match action {
+                                        "read" => {
+                                            crate::hypervisor::wasm_tools::WasmTools::fs_read(path)
+                                                .unwrap_or_else(|e| {
+                                                    format!("FileSystem read error: {}", e)
+                                                })
+                                        }
+                                        "write" => {
+                                            let content = tool_req
+                                                .payload
+                                                .get("content")
+                                                .and_then(|c| c.as_str())
+                                                .unwrap_or("");
+                                            crate::hypervisor::wasm_tools::WasmTools::fs_write(
+                                                path, content,
+                                            )
+                                            .map(|_| "File written successfully".to_string())
+                                            .unwrap_or_else(|e| {
+                                                format!("FileSystem write error: {}", e)
+                                            })
+                                        }
+                                        _ => format!("Unknown filesystem action: {}", action),
+                                    }
+                                }
+                                "ast-blast-radius" => {
+                                    let target = tool_req
+                                        .payload
+                                        .get("target_symbol_id")
+                                        .and_then(|t| t.as_str())
+                                        .unwrap_or("");
+                                    crate::hypervisor::wasm_tools::WasmTools::analyze_blast_radius(
+                                        target,
+                                    )
+                                    .map(|count| count.to_string())
+                                    .unwrap_or_else(|e| format!("AST Blast Radius error: {}", e))
+                                }
+                                "ephemeral-tunnel" => {
+                                    let agent_name = tool_req
+                                        .payload
+                                        .get("agent_name")
+                                        .and_then(|a| a.as_str())
+                                        .unwrap_or("unknown");
+                                    crate::hypervisor::wasm_tools::WasmTools::mint_ephemeral_svid(
+                                        agent_name,
+                                    )
+                                    .unwrap_or_else(|e| format!("Ephemeral Tunnel error: {}", e))
+                                }
+                                _ => format!("Unknown tool type: {}", tool_req.tool_type),
+                            },
+                        )
+                        .await
+                        .unwrap_or_else(|e| format!("Task error: {}", e));
 
-                    if let Ok(json_res) = serde_json::to_string(&res) {
-                        let _ = session_clone
-                            .put(format!("{}/tools/result", prefix), json_res)
-                            .res_async()
-                            .await;
-                    }
+                        let res = ToolResult {
+                            tool_id,
+                            result: result_str,
+                        };
+
+                        if let Ok(json_res) = serde_json::to_string(&res) {
+                            let _ = session_clone
+                                .put(format!("{}/tools/result", prefix), json_res)
+                                .res_async()
+                                .await;
+                        }
+                    });
                 }
             }
         });
