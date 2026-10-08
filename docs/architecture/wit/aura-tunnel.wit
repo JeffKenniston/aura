@@ -1,0 +1,18 @@
+package aura:tunnel@1.0.0;
+
+interface ephemeral {
+    record credentials {
+        token: string,
+        expires-at: u64
+    }
+
+    /// Mint short-lived credentials valid only for the duration of the task.
+    mint-credentials: func(service: string) -> result<credentials, string>;
+    
+    /// Explicitly revoke credentials on task cancel/failure.
+    revoke-credentials: func(token: string) -> result<_, string>;
+}
+
+world tunnel-service {
+    import ephemeral;
+}

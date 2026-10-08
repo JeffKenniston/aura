@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  spire-server:
+    image: ghcr.io/spiffe/spire-server:1.8.7
+    container_name: spire-server
+    hostname: spire-server
+    user: "0:0"
+    command: ["-config", "/opt/spire/conf/server/server.conf"]
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./server/server.conf:/opt/spire/conf/server/server.conf:ro
+      - ./data/server:/opt/spire/data/server:rw
+      - ./sockets:/opt/spire/sockets:rw
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/opt/spire/bin/spire-server", "healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  spire-agent:
+    image: ghcr.io/spiffe/spire-agent:1.8.7
+    container_name: spire-agent
+    hostname: spire-agent
+    depends_on:
+      spire-server:
+        condition: service_healthy
+    user: "0:0"
+    command: ["-config", "/opt/spire/conf/agent/agent.conf"]
+    volumes:
+      - ./agent/agent.conf:/opt/spire/conf/agent/agent.conf:ro
+      - ./data/agent:/opt/spire/data/agent:rw
+      - ./sockets:/run/spire/sockets:rw
+      - /tmp/spire-agent/public:/tmp/spire-agent/public:rw
+      - /var/run:/var/run:ro
+    restart: unless-stopped

@@ -1,9 +1,6 @@
-"""
-Legacy router module.
-Re-exports from aura_sdk.routing.router for backwards compatibility.
-"""
+"""Routing subpackage exposing ModelRouter, Tier, and routing functions."""
 
-from .routing.router import (
+from .router import (
     DEFAULT_TIER_MODELS,
     BudgetExceededError,
     ModelRouter,

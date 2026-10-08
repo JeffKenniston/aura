@@ -7,11 +7,35 @@ name = "aura-sdk"
 version = "0.1.0"
 description = "Aura Cognitive Orchestration Substrate"
 authors = ["Jeff Kenniston"]
+packages = [{include = "aura_sdk"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
 eclipse-zenoh = "0.11.0"
+google-genai = "^2.28.0"
+pydantic = "^2.10.0"
+httpx = "^0.28.0"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "8.1.1"
-pytest-asyncio = "0.23.6"
+pytest = ">=8.1.1"
+pytest-asyncio = ">=0.23.6"
+ruff = ">=0.16.0"
+mypy = ">=1.8.0"
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+ignore = ["E501", "BLE001", "S110"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_configs = true

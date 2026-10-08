@@ -1,9 +1,25 @@
 # Context Hygiene Ignore Rules for Antigravity & Aura Development
 
+# Aura Worktrees, Runtime Logs & Ephemeral Traces
+.aura/worktrees/
+.aura/logs/
+.aura/artifacts/
+.aura/traces/
+
 # Rust build artifacts
 target/
 **/*.rs.bk
 *.rlib
+pkg/
+
+# Code Coverage and Profiling
+coverage/
+htmlcov/
+.coverage
+.coverage.*
+*.profraw
+*.profdata
+lcov.info
 
 # Python cache and virtual environments
 .venv/
@@ -18,6 +34,9 @@ dist/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.tox/
+.nox/
+.hypothesis/
 
 # MicroVM, Kernel & Jailer artifacts
 rootfs/
@@ -28,9 +47,14 @@ rootfs/
 firecracker.log
 jailer.log
 *.sock
+jailer/
+chroot/
+*.tap
+*.veth
 
 # Knowledge graph and databases
 *.sqlite
+*.sqlite3
 *.sqlite-shm
 *.sqlite-wal
 *.db
@@ -39,10 +63,20 @@ jailer.log
 node_modules/
 .npm/
 
+# Documentation build outputs
+docs/_build/
+site/
+book/
+
 # Logs and runtime diagnostics
 *.log
 .agents/audit.log
 
 # OS & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 .DS_Store
 Thumbs.db

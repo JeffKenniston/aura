@@ -1,0 +1,21 @@
+package aura:fs@1.0.0;
+
+interface read {
+    /// Read a file within the assigned workspace.
+    /// Traps if path-prefix matching fails.
+    read-file: func(path: string) -> result<list<u8>, string>;
+}
+
+interface write {
+    /// Write a file within the assigned workspace.
+    /// Traps if path-prefix matching fails.
+    write-file: func(path: string, contents: list<u8>) -> result<_, string>;
+    
+    /// Patch an existing file atomically, returning the diff.
+    patch-file: func(path: string, diff: string) -> result<string, string>;
+}
+
+world workspace {
+    import read;
+    import write;
+}

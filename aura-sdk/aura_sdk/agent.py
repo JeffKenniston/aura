@@ -1,5 +1,6 @@
 import asyncio
 import json
+from typing import Any
 
 from google import genai
 
@@ -12,7 +13,7 @@ class Agent:
         self.name = name
         self.svid = svid
         self.transport = ZenohClient(svid)
-        self.client = genai.Client()
+        self.client: Any = genai.Client()
         self.file_search_store_name = file_search_store_name
         self.previous_interaction_id = None
         self.compression_required = False
@@ -66,7 +67,7 @@ class Agent:
         route_config = route_cognitive_demand(prompt)
         print(f"[{self.name}] ROUTE: Assigned to {route_config}")
         
-        tools = []
+        tools: list[Any] = []
         if self.file_search_store_name:
             tools.append({"type": "file_search", "file_search_store_names": [self.file_search_store_name]})
             
@@ -180,7 +181,9 @@ class Agent:
                             "total_tokens": total_tokens
                         }
                         self.transport.publish("tasks/metrics/tokens", json.dumps(metric))
-                
+        
+        return final_output
+
     async def execute_background_task(self, prompt: str):
         """
         Executes a long-horizon task autonomously in the cloud via background=True.
@@ -230,7 +233,8 @@ class Agent:
         
         # Fetch the completed interaction
         print(f"[{self.name}] Resuming execution and fetching final interaction state.")
-        completed_interaction = await self.client.aio.interactions.get(self.previous_interaction_id)
+        if self.previous_interaction_id:
+            await self.client.aio.interactions.get(self.previous_interaction_id)
         
         return f"Interaction finished with status: {final_status}"
 

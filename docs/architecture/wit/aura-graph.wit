@@ -1,0 +1,28 @@
+package aura:graph@1.0.0;
+
+interface query {
+    record symbol-info {
+        id: string,
+        file-id: string,
+        kind: string,
+        name: string,
+        qualified-name: string,
+        signature: string
+    }
+
+    record risk-report {
+        affected-symbols: list<string>,
+        risk-score: u32,
+        test-coverage: float32
+    }
+
+    /// Hybrid search combining BM25 and vector similarity.
+    hybrid-search: func(query: string, limit: u32) -> result<list<symbol-info>, string>;
+
+    /// Compute reverse dependencies and AST blast radius.
+    compute-blast-radius: func(symbol-id: string) -> result<risk-report, string>;
+}
+
+world semantic-index {
+    import query;
+}
