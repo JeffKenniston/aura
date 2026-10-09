@@ -67,6 +67,8 @@ pub struct AuraConfig {
     pub hypervisor: HypervisorConfig,
     #[serde(default)]
     pub supervisor: SupervisorConfig,
+    #[serde(default)]
+    pub pricing: PricingConfig,
 }
 
 impl AuraConfig {
@@ -77,6 +79,7 @@ impl AuraConfig {
         self.transport.validate()?;
         self.hypervisor.validate()?;
         self.supervisor.validate()?;
+        self.pricing.validate()?;
         Ok(())
     }
 
@@ -377,6 +380,154 @@ impl SupervisorConfig {
     }
 }
 
+/// Pricing and billing configuration for token usage and file storage (COG-014, RTE-009).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PricingConfig {
+    /// Cost per million input tokens in USD.
+    #[serde(default = "default_input_token_cost_per_million")]
+    pub input_token_cost_per_million: f64,
+
+    /// Cost per million output tokens in USD.
+    #[serde(default = "default_output_token_cost_per_million")]
+    pub output_token_cost_per_million: f64,
+
+    /// File storage cost per GB per hour in USD (COG-014).
+    #[serde(default = "default_file_storage_cost_per_gb_hour")]
+    pub file_storage_cost_per_gb_hour: f64,
+
+    /// File storage cost per GB per month in USD (default $0.02/GB-month).
+    #[serde(default = "default_file_storage_cost_per_gb_month")]
+    pub file_storage_cost_per_gb_month: f64,
+
+    /// Hard cost budget in USD (or token units) before queue suspension (RTE-009).
+    #[serde(default = "default_hard_cost_budget")]
+    pub hard_cost_budget: f64,
+
+    /// Threshold fraction of hard cost budget triggering queue suspension (default: 0.90 = 90%).
+    #[serde(default = "default_budget_suspension_threshold")]
+    pub budget_suspension_threshold: f64,
+
+    /// Billing system webhook URL to notify when 90% hard cost budget is reached (RTE-009).
+    #[serde(default = "default_billing_webhook_url")]
+    pub billing_webhook_url: String,
+
+    /// Timeout for billing webhook request in milliseconds.
+    #[serde(default = "default_webhook_timeout_ms")]
+    pub webhook_timeout_ms: u64,
+}
+
+fn default_input_token_cost_per_million() -> f64 {
+    0.15
+}
+
+fn default_output_token_cost_per_million() -> f64 {
+    0.60
+}
+
+fn default_file_storage_cost_per_gb_hour() -> f64 {
+    0.02 / 720.0
+}
+
+fn default_file_storage_cost_per_gb_month() -> f64 {
+    0.02
+}
+
+fn default_hard_cost_budget() -> f64 {
+    100.0
+}
+
+fn default_budget_suspension_threshold() -> f64 {
+    0.90
+}
+
+fn default_billing_webhook_url() -> String {
+    "http://127.0.0.1:8080/billing/webhook".to_string()
+}
+
+fn default_webhook_timeout_ms() -> u64 {
+    5000
+}
+
+impl Default for PricingConfig {
+    fn default() -> Self {
+        Self {
+            input_token_cost_per_million: default_input_token_cost_per_million(),
+            output_token_cost_per_million: default_output_token_cost_per_million(),
+            file_storage_cost_per_gb_hour: default_file_storage_cost_per_gb_hour(),
+            file_storage_cost_per_gb_month: default_file_storage_cost_per_gb_month(),
+            hard_cost_budget: default_hard_cost_budget(),
+            budget_suspension_threshold: default_budget_suspension_threshold(),
+            billing_webhook_url: default_billing_webhook_url(),
+            webhook_timeout_ms: default_webhook_timeout_ms(),
+        }
+    }
+}
+
+impl PricingConfig {
+    /// Calculates Gemini API token cost in USD based on input and output token counts.
+    pub fn calculate_token_cost(&self, input_tokens: u64, output_tokens: u64) -> f64 {
+        (input_tokens as f64 * self.input_token_cost_per_million / 1_000_000.0)
+            + (output_tokens as f64 * self.output_token_cost_per_million / 1_000_000.0)
+    }
+
+    /// Calculates storage cost for bytes held over duration in hours.
+    pub fn calculate_storage_cost_gb_hours(&self, size_bytes: u64, duration_hours: f64) -> f64 {
+        let size_gb = size_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+        size_gb * duration_hours * self.file_storage_cost_per_gb_hour
+    }
+
+    /// Calculates storage cost for bytes held over TTL days using monthly rate (COG-014).
+    pub fn calculate_storage_cost_by_days(&self, size_bytes: u64, ttl_days: f64) -> f64 {
+        let size_gb = size_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+        let month_fraction = ttl_days / 30.0;
+        size_gb * month_fraction * self.file_storage_cost_per_gb_month
+    }
+
+    /// Returns true if current spend or token count has reached the 90% hard cost budget threshold.
+    pub fn is_suspension_threshold_reached(&self, current_spend: f64) -> bool {
+        current_spend >= (self.hard_cost_budget * self.budget_suspension_threshold)
+    }
+
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        if self.input_token_cost_per_million < 0.0 {
+            return Err(ConfigError::Validation(
+                "pricing.input_token_cost_per_million must be non-negative".into(),
+            ));
+        }
+        if self.output_token_cost_per_million < 0.0 {
+            return Err(ConfigError::Validation(
+                "pricing.output_token_cost_per_million must be non-negative".into(),
+            ));
+        }
+        if self.file_storage_cost_per_gb_hour < 0.0 {
+            return Err(ConfigError::Validation(
+                "pricing.file_storage_cost_per_gb_hour must be non-negative".into(),
+            ));
+        }
+        if self.file_storage_cost_per_gb_month < 0.0 {
+            return Err(ConfigError::Validation(
+                "pricing.file_storage_cost_per_gb_month must be non-negative".into(),
+            ));
+        }
+        if self.hard_cost_budget <= 0.0 {
+            return Err(ConfigError::Validation(
+                "pricing.hard_cost_budget must be greater than 0".into(),
+            ));
+        }
+        if self.budget_suspension_threshold <= 0.0 || self.budget_suspension_threshold > 1.0 {
+            return Err(ConfigError::Validation(
+                "pricing.budget_suspension_threshold must be between 0.0 and 1.0".into(),
+            ));
+        }
+        if self.billing_webhook_url.trim().is_empty() {
+            return Err(ConfigError::Validation(
+                "pricing.billing_webhook_url cannot be empty".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -530,5 +681,60 @@ supervisor:
         let err = config.validate().unwrap_err();
         assert!(matches!(err, ConfigError::Validation(_)));
         assert!(err.to_string().contains("allowed_domains"));
+    }
+
+    #[test]
+    fn test_pricing_config_calculations() {
+        let pricing = PricingConfig::default();
+        // 1M input tokens at $0.15 + 1M output tokens at $0.60 = $0.75
+        let token_cost = pricing.calculate_token_cost(1_000_000, 1_000_000);
+        assert!((token_cost - 0.75).abs() < 1e-6);
+
+        // 1 GB file for 30 days at $0.02/GB-month
+        let storage_cost = pricing.calculate_storage_cost_by_days(1024 * 1024 * 1024, 30.0);
+        assert!((storage_cost - 0.02).abs() < 1e-6);
+
+        // Check 90% threshold
+        assert!(!pricing.is_suspension_threshold_reached(89.0));
+        assert!(pricing.is_suspension_threshold_reached(90.0));
+        assert!(pricing.is_suspension_threshold_reached(91.0));
+    }
+
+    #[test]
+    fn test_pricing_config_toml_parsing() {
+        let toml_str = r#"
+            [pricing]
+            input_token_cost_per_million = 0.075
+            output_token_cost_per_million = 0.30
+            file_storage_cost_per_gb_hour = 0.00003
+            file_storage_cost_per_gb_month = 0.02
+            hard_cost_budget = 50.0
+            budget_suspension_threshold = 0.90
+            billing_webhook_url = "http://billing.internal/webhook"
+        "#;
+        let config =
+            AuraConfig::from_toml_str(toml_str).expect("Failed to parse TOML with pricing");
+        assert_eq!(config.pricing.input_token_cost_per_million, 0.075);
+        assert_eq!(config.pricing.output_token_cost_per_million, 0.30);
+        assert_eq!(config.pricing.hard_cost_budget, 50.0);
+        assert_eq!(
+            config.pricing.billing_webhook_url,
+            "http://billing.internal/webhook"
+        );
+    }
+
+    #[test]
+    fn test_pricing_config_validation_rejects_negative_or_zero() {
+        let mut config = AuraConfig::default();
+        config.pricing.input_token_cost_per_million = -1.0;
+        assert!(config.validate().is_err());
+
+        let mut config2 = AuraConfig::default();
+        config2.pricing.hard_cost_budget = 0.0;
+        assert!(config2.validate().is_err());
+
+        let mut config3 = AuraConfig::default();
+        config3.pricing.budget_suspension_threshold = 1.5;
+        assert!(config3.validate().is_err());
     }
 }

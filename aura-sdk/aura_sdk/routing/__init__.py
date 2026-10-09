@@ -9,6 +9,7 @@ from .router import (
     TenantBudget,
     Tier,
     route_cognitive_demand,
+    route_cognitive_demand_async,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "TenantBudget",
     "Tier",
     "route_cognitive_demand",
+    "route_cognitive_demand_async",
 ]

@@ -2,6 +2,7 @@ pub mod bus;
 pub mod config;
 pub mod hypervisor;
 pub mod identity;
+pub mod knowledge;
 pub mod runtime;
 pub mod supervisor;
 pub mod transport;

@@ -1,4 +1,8 @@
 {
   "name": "aura-dev-kit",
-  "description": "Foundational customizations, rules, skills, and hooks for the Aura architecture."
+  "description": "Foundational customizations, rules, skills, agents, and hooks for the Aura architecture.",
+  "entries": [
+    { "path": "skills" },
+    { "path": "agents" }
+  ]
 }

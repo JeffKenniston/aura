@@ -4,6 +4,22 @@
 .aura/artifacts/
 .aura/traces/
 
+# Customizations (Prevent self-modification loops)
+.agents/
+
+# Compiled Binaries and Libraries
+*.wasm
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+
+# Test Fixtures & Mocks
+tests/fixtures/
+__fixtures__/
+mock_data/
+
 # Rust build outputs
 target/
 *.rlib
@@ -62,16 +78,11 @@ deploy/images/output/
 *.sqlite-wal
 *.db
 *.log
-.agents/audit.log
+audit.log
 
 # Node & package manager directories
 node_modules/
 .npm/
-
-# Documentation build outputs
-docs/_build/
-site/
-book/
 
 # OS & Editor files
 .vscode/

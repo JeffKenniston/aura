@@ -11,6 +11,19 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "condition": "args.command.includes('git commit') || args.command.includes('git push')",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cargo test && ./scripts/security-scan.sh",
+            "timeout": 120
+          }
+        ]
+      }
     ]
   },
   "python-validation": {
