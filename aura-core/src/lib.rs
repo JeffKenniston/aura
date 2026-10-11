@@ -11,15 +11,28 @@ use std::sync::Arc;
 
 /// Microkernel execution host initialization adhering to M1 Domain Boundaries
 pub async fn init() -> Result<(), Box<dyn std::error::Error>> {
+    init_with_config(config::AuraConfig::default()).await
+}
+
+/// Microkernel execution host initialization with custom declarative configuration (HOST-008)
+pub async fn init_with_config(config: config::AuraConfig) -> Result<(), Box<dyn std::error::Error>> {
     println!("Starting Aura Core microkernel initialization...");
 
     // 1. Load and validate declarative configuration (HOST-008)
-    let config = config::AuraConfig::default();
     config.validate()?;
     println!("Declarative configuration validated successfully.");
 
-    // 2. Initialize Tokio Runtime pool
-    runtime::init_tokio_pool()?;
+    // 2. Verify and register Tokio Runtime pool (M0-SPIKE-03, HOST-002)
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        runtime::set_runtime_handle(handle);
+        let worker_count = runtime::metrics().map(|m| m.num_workers()).unwrap_or(0);
+        println!(
+            "Tokio runtime pool verified and registered. Active worker threads: {}",
+            worker_count
+        );
+    } else {
+        return Err("Aura Core microkernel must be initialized within a running Tokio runtime context".into());
+    }
 
     // 3. Initialize SPIFFE/SPIRE Identity attestation
     let identity_doc = identity::fetch_svid().await?;
@@ -42,6 +55,18 @@ pub async fn init() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Aura Core microkernel successfully initialized.");
     Ok(())
+}
+
+/// Synchronous bootstrap entry point that initializes the Tokio runtime pool and drives `init()` (M0-SPIKE-03).
+pub fn run() -> Result<(), Box<dyn std::error::Error>> {
+    run_with_config(config::AuraConfig::default())
+}
+
+/// Synchronous bootstrap entry point with custom declarative configuration.
+pub fn run_with_config(config: config::AuraConfig) -> Result<(), Box<dyn std::error::Error>> {
+    config.validate()?;
+    let runtime = runtime::init_tokio_pool_with_config(&config.runtime)?;
+    runtime.block_on(init_with_config(config))
 }
 
 #[cfg(test)]

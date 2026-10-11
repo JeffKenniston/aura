@@ -1,0 +1,13 @@
+--- a/aura-core/src/config/mod.rs
++++ b/aura-core/src/config/mod.rs
+@@ -220,8 +220,8 @@ impl Default for TransportConfig {
+             alt_svc_header: "h3=\":4433\"; ma=86400".to_string(),
+             max_idle_timeout_ms: 5000,
+             max_udp_payload_size: 1350,
+-            initial_max_data: 10_000_000,
+-            initial_max_streams_bidi: 100,
++            initial_max_data: 50_000_000,
++            initial_max_streams_bidi: 10_000,
+         }
+     }
+ }

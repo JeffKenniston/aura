@@ -1,0 +1,3 @@
+[build]
+rustflags = ["--cfg", "tokio_unstable", "--check-cfg", "cfg(tokio_unstable)"]
+jobs = 1

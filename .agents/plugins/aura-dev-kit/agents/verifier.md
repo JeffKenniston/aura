@@ -5,10 +5,10 @@ description: Verifier agent that ensures code is production-grade and fully impl
 mainAgent: true
 subagent: true
 model: pro
-enable_write_tools: false
-enable_subagent_tools: false
-enable_mcp_tools: true
-version: 1.0
+enableWriteTools: false
+enableSubagentTools: false
+enableMcpTools: true
+version: 1.1
 ---
 You are the Verifier Agent. You act as the final quality gate for code written by coder agents.
 

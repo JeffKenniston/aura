@@ -30,3 +30,8 @@ ignore = "0.4"
 toml = "0.8"
 serde_yaml = "0.9"
 
+
+[profile.test]
+debug = 0
+opt-level = 0
+lto = false

@@ -1,0 +1,226 @@
+diff --git a/aura-sdk/aura_sdk/tools/bash.py b/aura-sdk/aura_sdk/tools/bash.py
+index 0460b28..a0ceec5 100644
+--- a/aura-sdk/aura_sdk/tools/bash.py
++++ b/aura-sdk/aura_sdk/tools/bash.py
+@@ -67,10 +67,13 @@ class BashTool:
+             "env": os.environ.copy(),
+         })
+ 
++        escaped_cwd = session["cwd"].replace('"', '\\"')
+         script = (
+-            f"cd {session['cwd']} 2>/dev/null || true\n"
++            f'cd "{escaped_cwd}" 2>/dev/null || true\n'
+             f"{command}\n"
+-            f"__AURA_EXIT__=$?\n"
++            f"__AURA_STATUS__=$?\n"
++            f"echo -n '__AURA_EXIT_MARKER__'\n"
++            f'echo "$__AURA_STATUS__"\n'
+             f"echo -n '__AURA_CWD_MARKER__'\n"
+             f"pwd\n"
+             f"echo -n '__AURA_ENV_MARKER__'\n"
+@@ -89,25 +92,38 @@ class BashTool:
+             timeout=self.timeout,
+         )
+ 
+-        if b"__AURA_CWD_MARKER__" in stdout_bytes:
+-            parts = stdout_bytes.split(b"__AURA_CWD_MARKER__")
++        if b"__AURA_EXIT_MARKER__" in stdout_bytes:
++            parts = stdout_bytes.split(b"__AURA_EXIT_MARKER__", 1)
+             user_stdout = parts[0]
+             rest = parts[1]
+ 
+-            if b"__AURA_ENV_MARKER__" in rest:
+-                cwd_part, env_part = rest.split(b"__AURA_ENV_MARKER__", 1)
+-                new_cwd = cwd_part.decode("utf-8", errors="replace").strip()
+-                if os.path.exists(new_cwd):
+-                    session["cwd"] = new_cwd
+-
+-                for item in env_part.split(b"\x00"):
+-                    if b"=" in item:
+-                        k, v = item.split(b"=", 1)
+-                        session["env"][k.decode("utf-8", errors="replace")] = v.decode("utf-8", errors="replace")
++            exit_code = proc.returncode
++            if b"__AURA_CWD_MARKER__" in rest:
++                exit_part, rest = rest.split(b"__AURA_CWD_MARKER__", 1)
++                try:
++                    exit_code = int(exit_part.decode("utf-8", errors="replace").strip())
++                except ValueError:
++                    pass
++
++                if b"__AURA_ENV_MARKER__" in rest:
++                    cwd_part, env_part = rest.split(b"__AURA_ENV_MARKER__", 1)
++                    new_cwd = cwd_part.decode("utf-8", errors="replace").strip()
++                    if os.path.exists(new_cwd):
++                        session["cwd"] = new_cwd
++
++                    new_env = {}
++                    for item in env_part.split(b"\x00"):
++                        if b"=" in item:
++                            k, v = item.split(b"=", 1)
++                            new_env[k.decode("utf-8", errors="replace")] = v.decode("utf-8", errors="replace")
++                    session["env"] = new_env
+ 
+             output_str = user_stdout.decode("utf-8", errors="replace").rstrip("\n")
+-            if proc.returncode != 0 and stderr_bytes and not output_str:
++            if exit_code != 0 and stderr_bytes and not output_str:
+                 return stderr_bytes.decode("utf-8", errors="replace").rstrip()
+             return output_str
+ 
+-        return stdout_bytes.decode("utf-8", errors="replace").rstrip("\n")
++        output_str = stdout_bytes.decode("utf-8", errors="replace").rstrip("\n")
++        if proc.returncode != 0 and stderr_bytes and not output_str:
++            return stderr_bytes.decode("utf-8", errors="replace").rstrip()
++        return output_str
+diff --git a/aura-core/src/hypervisor/firecracker.rs b/aura-core/src/hypervisor/firecracker.rs
+index 66e9c73..9b8e375 100644
+--- a/aura-core/src/hypervisor/firecracker.rs
++++ b/aura-core/src/hypervisor/firecracker.rs
+@@ -925,9 +925,10 @@ impl BashSessionHandle {
+         let sentinel_exit = format!("__AURA_EXIT__{}", marker);
+         let sentinel_env = format!("__AURA_ENV__{}", marker);
+ 
++        let escaped_cwd = cwd_clause.replace('"', "\\\"");
+         let script = format!(
+-            "cd {} 2>/dev/null || true\n{}\n__AURA_STATUS__=$?\nprintf \"\\n{}:%s\\n{}:%s\\n{}\\n\" \"$PWD\" \"$__AURA_STATUS__\" \"{}\"\nenv -0\n",
+-            cwd_clause, command, sentinel_cwd, sentinel_exit, sentinel_env, sentinel_env
++            "cd \"{}\" 2>/dev/null || true\n{}\n__AURA_STATUS__=$?\nprintf \"\\n{}:%s\\n{}:%s\\n{}\\n\" \"$PWD\" \"$__AURA_STATUS__\" \"{}\"\nenv -0\n",
++            escaped_cwd, command, sentinel_cwd, sentinel_exit, sentinel_env, sentinel_env
+         );
+ 
+         let mut cmd = tokio::process::Command::new("bash");
+@@ -956,6 +957,7 @@ impl BashSessionHandle {
+         };
+ 
+         if let Some(post) = env_bytes {
++            let mut new_env = std::collections::HashMap::new();
+             let post_trimmed = if post.starts_with(b"\n") { &post[1..] } else { post };
+             for entry in post_trimmed.split(|&b| b == 0) {
+                 if let Some(eq_idx) = entry.iter().position(|&b| b == b'=') {
+@@ -963,9 +965,10 @@ impl BashSessionHandle {
+                         std::str::from_utf8(&entry[..eq_idx]),
+                         std::str::from_utf8(&entry[eq_idx + 1..]),
+                     ) {
+-                        self.current_env.insert(k.to_string(), v.to_string());
++                        new_env.insert(k.to_string(), v.to_string());
+                     }
+                 }
++            self.current_env = new_env;
+             }
+         }
+ 
+@@ -999,7 +1002,7 @@ impl BashSessionHandle {
+     }
+ 
+     /// Tears down the underlying microVM.
+-    pub async fn close(mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
++    pub async fn close(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+         let _ = self.vm.teardown();
+         Ok(())
+     }
+@@ -1007,7 +1010,7 @@ impl BashSessionHandle {
+ 
+ /// Coordinates active persistent bash sessions across microVM instances (TOOL-BASH-002).
+ pub struct BashSessionManager {
+-    sessions: std::sync::Arc<tokio::sync::Mutex<std::collections::HashMap<String, BashSessionHandle>>>,
++    sessions: std::sync::Arc<tokio::sync::Mutex<std::collections::HashMap<String, std::sync::Arc<tokio::sync::Mutex<BashSessionHandle>>>>>,
+     vm_config: VmConfig,
+     inactivity_timeout: Duration,
+ }
+@@ -1029,30 +1032,38 @@ impl BashSessionManager {
+         session_id: &str,
+         command: &str,
+     ) -> Result<BashCommandOutput, Box<dyn std::error::Error + Send + Sync>> {
+-        let mut sessions = self.sessions.lock().await;
+-        if let Some(session) = sessions.get_mut(session_id) {
+-            if session.last_accessed.elapsed() > self.inactivity_timeout {
+-                let old_session = sessions.remove(session_id).unwrap();
+-                let _ = old_session.close().await;
+-                let mut new_session = BashSessionHandle::new(session_id, &self.vm_config, DEFAULT_BASH_VSOCK_PORT).await?;
+-                let output = new_session.execute(command, self.inactivity_timeout).await?;
+-                sessions.insert(session_id.to_string(), new_session);
+-                Ok(output)
++        let session_arc = {
++            let mut sessions = self.sessions.lock().await;
++            if let Some(arc) = sessions.get(session_id) {
++                arc.clone()
+             } else {
+-                session.execute(command, self.inactivity_timeout).await
++                let session = BashSessionHandle::new(session_id, &self.vm_config, DEFAULT_BASH_VSOCK_PORT).await?;
++                let arc = std::sync::Arc::new(tokio::sync::Mutex::new(session));
++                sessions.insert(session_id.to_string(), arc.clone());
++                arc
+             }
+-        } else {
+-            let mut session = BashSessionHandle::new(session_id, &self.vm_config, DEFAULT_BASH_VSOCK_PORT).await?;
+-            let output = session.execute(command, self.inactivity_timeout).await?;
+-            sessions.insert(session_id.to_string(), session);
++        };
++
++        let mut session = session_arc.lock().await;
++        if session.last_accessed.elapsed() > self.inactivity_timeout {
++            let _ = session.close().await;
++            let mut new_session = BashSessionHandle::new(session_id, &self.vm_config, DEFAULT_BASH_VSOCK_PORT).await?;
++            let output = new_session.execute(command, self.inactivity_timeout).await?;
++            *session = new_session;
+             Ok(output)
++        } else {
++            session.execute(command, self.inactivity_timeout).await
+         }
+     }
+ 
+     /// Closes and tears down an active session by ID.
+     pub async fn close_session(&self, session_id: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+-        let mut sessions = self.sessions.lock().await;
+-        if let Some(session) = sessions.remove(session_id) {
++        let maybe_arc = {
++            let mut sessions = self.sessions.lock().await;
++            sessions.remove(session_id)
++        };
++        if let Some(arc) = maybe_arc {
++            let mut session = arc.lock().await;
+             session.close().await?;
+             Ok(true)
+         } else {
+@@ -1062,24 +1073,32 @@ impl BashSessionManager {
+ 
+     /// Sweeps and terminates any sessions that have exceeded the inactivity timeout.
+     pub async fn cleanup_expired_sessions(&self) -> usize {
+-        let mut sessions = self.sessions.lock().await;
+-        let timeout = self.inactivity_timeout;
+         let mut expired = Vec::new();
+-        for (sid, handle) in sessions.iter() {
+-            if handle.last_accessed.elapsed() > timeout {
+-                expired.push(sid.clone());
++        {
++            let mut sessions = self.sessions.lock().await;
++            let timeout = self.inactivity_timeout;
++            let mut to_remove = Vec::new();
++            for (sid, arc) in sessions.iter() {
++                if let Ok(guard) = arc.try_lock() {
++                    if guard.last_accessed.elapsed() > timeout {
++                        to_remove.push(sid.clone());
++                    }
++                }
++            }
++            for sid in to_remove {
++                if let Some(arc) = sessions.remove(&sid) {
++                    expired.push(arc);
++                }
+             }
+         }
+         let count = expired.len();
+-        for sid in expired {
+-            if let Some(handle) = sessions.remove(&sid) {
+-                let _ = handle.close().await;
+-            }
++        for arc in expired {
++            let mut guard = arc.lock().await;
++            let _ = guard.close().await;
+         }
+         count
+     }
+ 
+-    /// Returns the number of currently active sessions.
+     pub async fn session_count(&self) -> usize {
+         self.sessions.lock().await.len()
+     }

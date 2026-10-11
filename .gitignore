@@ -3,9 +3,12 @@
 .aura/logs/
 .aura/artifacts/
 .aura/traces/
+.aura/run/
+.aura/scratch/
 
 # Rust build outputs
 target/
+**/target/
 *.rlib
 **/*.rs.bk
 pkg/
@@ -24,6 +27,7 @@ lcov.info
 venv/
 env/
 __pycache__/
+**/__pycache__/
 *.pyc
 *.py[cod]
 *$py.class
@@ -31,11 +35,17 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
+**/.pytest_cache/
 .mypy_cache/
+**/.mypy_cache/
 .ruff_cache/
+**/.ruff_cache/
 .tox/
 .nox/
 .hypothesis/
+.direnv/
+.env.local
+.env.*.local
 
 # MicroVM and Firecracker disk images
 rootfs/
@@ -46,6 +56,7 @@ rootfs/
 firecracker.log
 jailer.log
 *.sock
+**/*.sock
 jailer/
 chroot/
 *.tap
@@ -55,13 +66,16 @@ chroot/
 deploy/images/.cache/
 deploy/images/output/
 
-# Databases & logs
+# Databases, logs & ephemera
 *.sqlite
 *.sqlite3
 *.sqlite-shm
 *.sqlite-wal
 *.db
 *.log
+**/*.log
+*.tmp
+**/*.tmp
 .agents/audit.log
 
 # Node & package manager directories
@@ -81,3 +95,10 @@ book/
 *~
 .DS_Store
 Thumbs.db
+.Spotlight-V100
+.Trashes
+Desktop.ini
+*.orig
+*.rej
+.project
+.settings/

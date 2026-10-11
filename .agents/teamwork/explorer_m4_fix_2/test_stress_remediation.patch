@@ -1,0 +1,131 @@
+--- a/aura-sdk/tests/test_browser_tool_stress.py
++++ b/aura-sdk/tests/test_browser_tool_stress.py
+@@ -8,11 +8,11 @@
+ 4. Clean close and explicit re-connection lifecycle.
+ 5. Invalid selectors (syntax error, non-existent, special characters).
+ 6. Heavy concurrent calls serialized safely when connected.
+-7. Cold-client concurrency race condition (spawns redundant WebSockets).
+-8. Screenshot payload under 1MB vs over 1MB (websockets default max_size limit).
++7. Cold-client concurrency safely synchronized under lock (no race conditions or dropped responses).
++8. Screenshot payload under 1MB and over 1MB (handled safely by max_size=32MB limit).
+ 9. JavaScript evaluation data types, exceptions, and promises.
+ 10. Target discovery fallback chain (/json/new -> /json/list -> /json/version).
+-11. Disconnect behavior when server drops connection mid-session.
++11. Auto-reconnection on subsequent command after server drops connection mid-session.
+ """
+ 
+ from __future__ import annotations
+@@ -45,7 +45,7 @@
+         "list_endpoint_status": 200,
+         "empty_list": False,
+         "version_endpoint_status": 200,
+-        "screenshot_size": 200_000, # 200 KB default
++        "screenshot_size": 200_000,  # 200 KB default
+         "connected_clients": 0,
+         "received_commands": [],
+     }
+@@ -221,7 +221,7 @@
+         finally:
+             server_control["connected_clients"] -= 1
+ 
+-    server = await serve(ws_handler, "127.0.0.1", 0, process_request=process_request, max_size=10*1024*1024)
++    server = await serve(ws_handler, "127.0.0.1", 0, process_request=process_request, max_size=32*1024*1024)
+     port = server.sockets[0].getsockname()[1]
+     cdp_url = f"http://127.0.0.1:{port}"
+ 
+@@ -309,22 +309,19 @@
+ 
+ 
+ @pytest.mark.asyncio
+-async def test_screenshot_over_1mb_fails_due_to_websockets_default_max_size(stress_cdp_server):
+-    """
+-    Empirical proof of GAP/Bug in AsyncCdpClient:
+-    websockets.connect defaults to max_size=1MB (1,048,576 bytes).
+-    Screenshots exceeding 1MB cause the client to send CloseCode 1009 (MESSAGE_TOO_BIG)
+-    and terminate the connection.
++async def test_screenshot_over_1mb_succeeds(stress_cdp_server):
++    """
++    Verifies that with max_size=32MB configured on websockets.connect,
++    screenshots exceeding 1MB (e.g. 1.5MB) stream successfully without ConnectionClosedError.
+     """
+     tool = BrowserTool(cdp_url=stress_cdp_server["cdp_url"])
+     # 1.5 MB screenshot
+     stress_cdp_server["control"]["screenshot_size"] = 1_500_000
+ 
+-    with pytest.raises(websockets.exceptions.ConnectionClosedError) as exc_info:
+-        await tool.screenshot(format="png")
+-    assert "1009" in str(exc_info.value) or (
+-        exc_info.value.sent is not None and exc_info.value.sent.code == 1009
+-    )
++    png_bytes = await tool.screenshot(format="png")
++    assert isinstance(png_bytes, bytes)
++    assert png_bytes.startswith(PNG_MAGIC_BYTES)
++    assert len(png_bytes) == 1_500_000
+     await tool.close()
+ 
+ 
+@@ -348,11 +345,10 @@
+ 
+ 
+ @pytest.mark.asyncio
+-async def test_cold_client_concurrent_connect_race_condition(stress_cdp_server):
+-    """
+-    Empirical proof of race condition:
+-    Unsynchronized 'if self._ws is None: await self.connect()' spawns multiple WebSockets,
+-    overwrites self._ws mid-flight, and causes dropped responses / TimeoutError.
++async def test_cold_client_concurrent_connect_synchronized(stress_cdp_server):
++    """
++    Verifies that cold-client concurrent requests are synchronized under self._lock,
++    preventing race conditions, duplicate connections, and dropped responses.
+     """
+     tool = BrowserTool(cdp_url=stress_cdp_server["cdp_url"])
+ 
+@@ -360,9 +356,10 @@
+         return await tool.evaluate(f"cold_{idx}")
+ 
+     tasks = [call_worker(i) for i in range(5)]
+-    # Due to the race condition, responses are lost to orphan sockets, triggering TimeoutError
+-    with pytest.raises((TimeoutError, asyncio.TimeoutError)):
+-        await asyncio.wait_for(asyncio.gather(*tasks), timeout=3.0)
++    results = await asyncio.wait_for(asyncio.gather(*tasks), timeout=5.0)
++
++    for i in range(5):
++        assert f"eval_echo:cold_{i}" in results
+ 
+     await tool.close()
+ 
+@@ -419,11 +416,11 @@
+ 
+ 
+ @pytest.mark.asyncio
+-async def test_server_disconnect_leaves_stale_ws_handle(stress_cdp_server):
+-    """
+-    Empirical proof of lack of auto-reconnect:
+-    When the server closes the WebSocket, self._ws is not cleared.
+-    Subsequent commands fail with ConnectionClosed on stale socket until tool.close() is called.
++async def test_server_disconnect_auto_reconnects(stress_cdp_server):
++    """
++    Verifies that server disconnect mid-session resets self._ws = None,
++    enabling subsequent commands to automatically reconnect and succeed
++    without requiring manual tool.close().
+     """
+     tool = BrowserTool(cdp_url=stress_cdp_server["cdp_url"])
+     res = await tool.evaluate("before_disconnect")
+@@ -437,12 +434,8 @@
+     # Server is back up
+     stress_cdp_server["control"]["force_disconnect"] = False
+ 
+-    # Attempting to send again without manual tool.close() fails because self._ws is stale
+-    with pytest.raises(websockets.exceptions.ConnectionClosed):
+-        await tool.evaluate("after_disconnect_unhandled")
+-
+-    # Once explicit tool.close() is called, recovery succeeds
+-    await tool.close()
+-    recovered = await tool.evaluate("after_explicit_close")
+-    assert recovered == "eval_echo:after_explicit_close"
+-    await tool.close()
++    # Attempting to send again automatically reconnects because self._ws was cleared
++    recovered = await tool.evaluate("after_disconnect_auto_reconnect")
++    assert recovered == "eval_echo:after_disconnect_auto_reconnect"
++
++    await tool.close()

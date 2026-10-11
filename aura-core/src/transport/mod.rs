@@ -1,8 +1,13 @@
 pub mod http3;
+pub mod mcp;
 pub mod rate_limiter;
 pub mod webhook;
 
 pub use http3::{start_quic_listener, Http3Transport};
+pub use mcp::{
+    JsonRpcError, JsonRpcRequest, JsonRpcResponse, McpContent, McpResult, McpServer,
+    ToolDefinition,
+};
 pub use rate_limiter::{RateLimiter, ShadowTracker, TenantUsage, TrackedFile};
 pub use webhook::{
     BillingError, BillingOutcome, BillingWebhookPayload, QueueSuspensionManager, TenantQueueStatus,

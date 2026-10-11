@@ -16,7 +16,7 @@ version: 1.0
 - **Component Model**: Built against WASI 0.3, utilizing native asynchronous streams and futures in the ABI to eliminate readiness polling.
 - **Engine**: Hosted in `wasmtime` with Cranelift JIT compilation and pooling allocators for sub-millisecond instantiation.
 - **Fuel Metering**: Strict instruction fuel-metering is enforced to terminate runaway executions deterministically.
-- **Dynamic Linking Restriction**: Static component composition post-deployment must be utilized until Component Model 1.0 formally standardizes dynamic host linking.
+- **Dynamic Linking Restriction (GAP-003)**: Standard WASI 0.3 lacks standardized dynamic runtime hot-linking of newly generated WASM components into an active host process without pre-composition or host restart. Deploy-time static WIT component linking (via `wit-bindgen` and Cranelift compilation) must be utilized until Component Model 1.0 formally standardizes dynamic host linking.
 
 ## 2. Heavyweight Workloads: Firecracker MicroVMs
 - Target tasks: Shell commands (`Bash`), package installations, headless browser testing (`Browser` / Chromium), and GUI interactions (`Computer`).

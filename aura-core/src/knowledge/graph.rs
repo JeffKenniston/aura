@@ -43,11 +43,39 @@ impl KnowledgeGraph {
     }
 
     /// Executes Hybrid Search combining BM25 and vector similarity using Reciprocal Rank Fusion (RRF)
-    pub fn search(&self, _query: &str) -> Vec<String> {
-        // BM25 lexical search via FTS5
-        // Vector search via sqlite-vec
-        // RRF combine
-        vec![]
+    pub fn search(&self, query: &str, query_embedding: &[f32; 768]) -> Vec<String> {
+        let mut stmt = self.db_conn.prepare(
+            "WITH bm25_results AS (
+                SELECT rowid, rank 
+                FROM fts_symbol 
+                WHERE fts_symbol MATCH ?1
+            ),
+            vec_results AS (
+                SELECT rowid, distance 
+                FROM vec_embeddings 
+                WHERE embedding MATCH ?2 AND k = 100
+            ),
+            combined AS (
+                SELECT 
+                    COALESCE(b.rowid, v.rowid) AS doc_id,
+                    (COALESCE(1.0 / (60.0 + b.rank), 0.0)) + 
+                    (COALESCE(1.0 / (60.0 + v.distance), 0.0)) AS rrf_score
+                FROM bm25_results b
+                FULL OUTER JOIN vec_results v ON b.rowid = v.rowid
+            )
+            SELECT s.name 
+            FROM combined c
+            JOIN symbol s ON c.doc_id = s.id
+            ORDER BY c.rrf_score DESC
+            LIMIT 50;"
+        ).unwrap();
+        
+        let embedding_bytes = unsafe { 
+            std::slice::from_raw_parts(query_embedding.as_ptr() as *const u8, query_embedding.len() * 4) 
+        };
+        
+        let results = stmt.query_map(rusqlite::params![query, embedding_bytes], |row| row.get(0)).unwrap();
+        results.filter_map(Result::ok).collect()
     }
 }
 

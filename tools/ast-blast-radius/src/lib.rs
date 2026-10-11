@@ -1,10 +1,15 @@
 pub mod cte;
 pub mod graph;
+pub mod mcp;
 pub mod risk;
 pub mod types;
 
 pub use cte::{CallGraph, ReverseDependency};
 pub use graph::KnowledgeGraphEngine;
+pub use mcp::{
+    handle_mcp_request, BlastRadiusMcpReport, McpContent, McpError, McpHandler, McpRequest,
+    McpResponse, McpResult, ToolDefinition,
+};
 pub use risk::calculate_risk_report;
 pub use types::{RiskReport, SymbolInfo};
 
@@ -14,6 +19,7 @@ wit_bindgen::generate!({
     world: "blast-radius",
 });
 
+#[allow(dead_code)]
 struct BlastRadiusComponent;
 
 impl exports::aura::graph::query::Guest for BlastRadiusComponent {

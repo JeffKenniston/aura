@@ -69,6 +69,8 @@ pub struct AuraConfig {
     pub supervisor: SupervisorConfig,
     #[serde(default)]
     pub pricing: PricingConfig,
+    #[serde(default)]
+    pub runtime: RuntimeConfig,
 }
 
 impl AuraConfig {
@@ -80,6 +82,7 @@ impl AuraConfig {
         self.hypervisor.validate()?;
         self.supervisor.validate()?;
         self.pricing.validate()?;
+        self.runtime.validate()?;
         Ok(())
     }
 
@@ -210,6 +213,8 @@ pub struct TransportConfig {
     pub max_udp_payload_size: usize,
     pub initial_max_data: u64,
     pub initial_max_streams_bidi: u64,
+    #[serde(default)]
+    pub server_url: Option<String>,
 }
 
 impl Default for TransportConfig {
@@ -220,8 +225,9 @@ impl Default for TransportConfig {
             alt_svc_header: "h3=\":4433\"; ma=86400".to_string(),
             max_idle_timeout_ms: 5000,
             max_udp_payload_size: 1350,
-            initial_max_data: 10_000_000,
-            initial_max_streams_bidi: 100,
+            initial_max_data: 50_000_000,
+            initial_max_streams_bidi: 10_000,
+            server_url: Some("https://127.0.0.1:4433/mcp".to_string()),
         }
     }
 }
@@ -243,6 +249,13 @@ impl TransportConfig {
             return Err(ConfigError::Validation(
                 "transport.max_idle_timeout_ms must be greater than 0".into(),
             ));
+        }
+        if let Some(ref url) = self.server_url {
+            if !url.starts_with("http://") && !url.starts_with("https://") {
+                return Err(ConfigError::Validation(
+                    "transport.server_url must start with http:// or https://".into(),
+                ));
+            }
         }
         Ok(())
     }
@@ -528,6 +541,70 @@ impl PricingConfig {
     }
 }
 
+/// Tokio asynchronous runtime and thread pool configuration (M0-SPIKE-03, HOST-002).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RuntimeConfig {
+    /// Number of worker threads for the asynchronous Tokio runtime pool.
+    /// Defaults to detected system parallelism.
+    #[serde(default = "default_worker_threads")]
+    pub worker_threads: usize,
+
+    /// Maximum number of blocking threads for the dedicated blocking task pool.
+    /// Defaults to 512 threads.
+    #[serde(default = "default_max_blocking_threads")]
+    pub max_blocking_threads: usize,
+
+    /// Idle keep-alive duration in seconds for threads in the blocking pool.
+    /// Defaults to 10 seconds.
+    #[serde(default = "default_thread_keep_alive_secs")]
+    pub thread_keep_alive_secs: u64,
+}
+
+impl Default for RuntimeConfig {
+    fn default() -> Self {
+        Self {
+            worker_threads: default_worker_threads(),
+            max_blocking_threads: default_max_blocking_threads(),
+            thread_keep_alive_secs: default_thread_keep_alive_secs(),
+        }
+    }
+}
+
+fn default_worker_threads() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
+}
+
+fn default_max_blocking_threads() -> usize {
+    512
+}
+
+fn default_thread_keep_alive_secs() -> u64 {
+    10
+}
+
+impl RuntimeConfig {
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        if self.worker_threads == 0 {
+            return Err(ConfigError::Validation(
+                "runtime.worker_threads must be greater than 0".into(),
+            ));
+        }
+        if self.max_blocking_threads == 0 {
+            return Err(ConfigError::Validation(
+                "runtime.max_blocking_threads must be greater than 0".into(),
+            ));
+        }
+        if self.thread_keep_alive_secs == 0 {
+            return Err(ConfigError::Validation(
+                "runtime.thread_keep_alive_secs must be greater than 0".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -736,5 +813,58 @@ supervisor:
         let mut config3 = AuraConfig::default();
         config3.pricing.budget_suspension_threshold = 1.5;
         assert!(config3.validate().is_err());
+    }
+
+    #[test]
+    fn test_runtime_config_defaults() {
+        let config = RuntimeConfig::default();
+        assert!(config.worker_threads >= 1);
+        assert_eq!(config.max_blocking_threads, 512);
+        assert_eq!(config.thread_keep_alive_secs, 10);
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_runtime_config_validation_rejects_zero_worker_threads() {
+        let config = RuntimeConfig {
+            worker_threads: 0,
+            max_blocking_threads: 512,
+            thread_keep_alive_secs: 10,
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_runtime_config_validation_rejects_zero_max_blocking_threads() {
+        let config = RuntimeConfig {
+            worker_threads: 4,
+            max_blocking_threads: 0,
+            thread_keep_alive_secs: 10,
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_runtime_config_validation_rejects_zero_thread_keep_alive_secs() {
+        let config = RuntimeConfig {
+            worker_threads: 4,
+            max_blocking_threads: 512,
+            thread_keep_alive_secs: 0,
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_runtime_config_toml_deserialization() {
+        let toml_data = r#"
+            [runtime]
+            worker_threads = 8
+            max_blocking_threads = 256
+            thread_keep_alive_secs = 30
+        "#;
+        let config = AuraConfig::from_toml_str(toml_data).expect("Failed to parse TOML");
+        assert_eq!(config.runtime.worker_threads, 8);
+        assert_eq!(config.runtime.max_blocking_threads, 256);
+        assert_eq!(config.runtime.thread_keep_alive_secs, 30);
     }
 }

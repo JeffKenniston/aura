@@ -37,6 +37,27 @@ impl Http3Transport {
         Ok(quiche_config)
     }
 
+    /// Builds server-side quiche configuration with loaded TLS certificate chain and private key.
+    pub fn build_server_quiche_config(
+        config: &TransportConfig,
+        cert_path: &str,
+        key_path: &str,
+    ) -> Result<quiche::Config, quiche::Error> {
+        let mut quiche_config = Self::build_quiche_config(config)?;
+        quiche_config.load_cert_chain_from_pem_file(cert_path)?;
+        quiche_config.load_priv_key_from_pem_file(key_path)?;
+        Ok(quiche_config)
+    }
+
+    /// Builds client-side quiche configuration with peer verification disabled for local/testing scenarios.
+    pub fn build_client_quiche_config(
+        config: &TransportConfig,
+    ) -> Result<quiche::Config, quiche::Error> {
+        let mut quiche_config = Self::build_quiche_config(config)?;
+        quiche_config.verify_peer(false);
+        Ok(quiche_config)
+    }
+
     /// Starts the asynchronous UDP QUIC listener and TCP fallback server with default parameters.
     pub async fn start_quic_listener() -> Result<(), Box<dyn std::error::Error>> {
         let default_config = TransportConfig::default();

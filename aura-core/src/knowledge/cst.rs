@@ -1,4 +1,4 @@
-use tree_sitter::{Language, Node, Parser, Tree};
+use tree_sitter::{InputEdit, Language, Node, Parser, Point, Tree};
 
 pub fn get_language(extension: &str) -> Option<Language> {
     match extension {
@@ -85,5 +85,42 @@ mod tests {
         let tree = parse(code, "py").expect("Failed to parse Python code");
         assert_eq!(tree.root.kind, "module");
         assert_eq!(tree.serialize(), "def greet():\n    return 'hello'\n");
+    }
+}
+
+pub struct CstManager {
+    parser: Parser,
+    tree: Option<Tree>,
+    source_code: String,
+}
+
+impl CstManager {
+    pub fn new(language: tree_sitter::Language, source_code: String) -> Self {
+        let mut parser = Parser::new();
+        parser.set_language(&language).unwrap();
+        let tree = parser.parse(&source_code, None);
+        Self { parser, tree, source_code }
+    }
+
+    pub fn edit(&mut self, start_byte: usize, old_end_byte: usize, new_end_byte: usize, start_point: Point, old_end_point: Point, new_end_point: Point, new_source: String) {
+        if let Some(mut tree) = self.tree.take() {
+            let edit = InputEdit {
+                start_byte,
+                old_end_byte,
+                new_end_byte,
+                start_position: start_point,
+                old_end_position: old_end_point,
+                new_end_position: new_end_point,
+            };
+            tree.edit(&edit);
+            
+            // Re-parse with the old tree to perform incremental parsing
+            self.tree = self.parser.parse(&new_source, Some(&tree));
+            self.source_code = new_source;
+        }
+    }
+    
+    pub fn get_cst(&self) -> Option<&Tree> {
+        self.tree.as_ref()
     }
 }

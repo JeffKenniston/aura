@@ -1,0 +1,179 @@
+--- a/aura-sdk/aura_sdk/tools/browser.py
++++ b/aura-sdk/aura_sdk/tools/browser.py
+@@ -21,6 +21,8 @@
+ 
+ logger = logging.getLogger(__name__)
+ 
++DEFAULT_MAX_WS_PAYLOAD_SIZE = 32 * 1024 * 1024  # 32 MiB for large screenshots
++
+ 
+ class AsyncCdpClient:
+     """
+@@ -28,8 +30,13 @@
+     Communicates with headless Chromium via forwarded port 9222.
+     """
+ 
+-    def __init__(self, cdp_url: str = "http://127.0.0.1:9222"):
++    def __init__(
++        self,
++        cdp_url: str = "http://127.0.0.1:9222",
++        max_size: int | None = DEFAULT_MAX_WS_PAYLOAD_SIZE,
++    ):
+         self.cdp_url = cdp_url.rstrip("/")
++        self.max_size = max_size
+         self._ws_url: str | None = None
+         self._ws: Any = None
+         self._msg_id: int = 0
+@@ -38,10 +45,36 @@
+ 
+     @property
+     def is_connected(self) -> bool:
+-        return self._ws is not None
++        """Indicates whether an active WebSocket connection is open."""
++        if self._ws is None:
++            return False
++        state = getattr(self._ws, "state", None)
++        if state is not None:
++            return state == websockets.protocol.State.OPEN
++        return True
+ 
+     async def connect(self) -> None:
+         """Discovers the page/browser target and opens a WebSocket connection."""
++        async with self._lock:
++            await self._connect_locked()
++
++    async def _connect_locked(self) -> None:
++        """
++        Internal connection routine.
++        MUST only be invoked while holding self._lock to ensure thread-safety
++        and prevent race conditions on cold starts.
++        """
++        if self.is_connected:
++            return
++
++        # Ensure any existing/stale connection handle is cleaned up
++        if self._ws is not None:
++            try:
++                await self._ws.close()
++            except Exception:
++                pass
++            self._ws = None
++
+         async with httpx.AsyncClient() as client:
+             target_data: dict[str, Any] | None = None
+             try:
+@@ -73,39 +106,52 @@
+         if not self._ws_url:
+             raise RuntimeError(f"Failed to obtain webSocketDebuggerUrl from {self.cdp_url}")
+ 
+-        self._ws = await websockets.connect(self._ws_url)
++        try:
++            self._ws = await websockets.connect(self._ws_url, max_size=self.max_size)
++        except Exception:
++            self._ws = None
++            raise
+ 
+     async def send_command(
+         self, method: str, params: dict[str, Any] | None = None, timeout: float = 10.0
+     ) -> dict[str, Any]:
+         """Sends a JSON-RPC CDP command and awaits its corresponding result."""
+-        if self._ws is None:
+-            await self.connect()
+-
+         async with self._lock:
++            if not self.is_connected:
++                await self._connect_locked()
++
+             self._msg_id += 1
+             cmd_id = self._msg_id
+             payload = {"id": cmd_id, "method": method, "params": params or {}}
+-            await self._ws.send(json.dumps(payload))
+-
+-            async def _recv_response() -> dict[str, Any]:
+-                while True:
+-                    raw_msg = await self._ws.recv()
+-                    if isinstance(raw_msg, bytes):
+-                        raw_msg = raw_msg.decode("utf-8")
+-                    msg = json.loads(raw_msg)
+-                    if msg.get("id") == cmd_id:
+-                        if "error" in msg:
+-                            err = msg["error"]
+-                            err_msg = (
+-                                err.get("message", str(err))
+-                                if isinstance(err, dict)
+-                                else str(err)
+-                            )
+-                            raise RuntimeError(f"CDP command '{method}' error: {err_msg}")
+-                        return msg.get("result", {})
+-
+-            return await asyncio.wait_for(_recv_response(), timeout=timeout)
++
++            try:
++                await self._ws.send(json.dumps(payload))
++
++                async def _recv_response() -> dict[str, Any]:
++                    while True:
++                        raw_msg = await self._ws.recv()
++                        if isinstance(raw_msg, bytes):
++                            raw_msg = raw_msg.decode("utf-8")
++                        msg = json.loads(raw_msg)
++                        if msg.get("id") == cmd_id:
++                            if "error" in msg:
++                                err = msg["error"]
++                                err_msg = (
++                                    err.get("message", str(err))
++                                    if isinstance(err, dict)
++                                    else str(err)
++                                )
++                                raise RuntimeError(f"CDP command '{method}' error: {err_msg}")
++                            return msg.get("result", {})
++
++                return await asyncio.wait_for(_recv_response(), timeout=timeout)
++            except (websockets.exceptions.ConnectionClosed, ConnectionResetError, BrokenPipeError):
++                self._ws = None
++                raise
++            except Exception:
++                if self._ws is not None and not self.is_connected:
++                    self._ws = None
++                raise
+ 
+     async def navigate(self, url: str) -> dict[str, Any]:
+         """Navigates the page to the target URL."""
+@@ -154,12 +200,13 @@
+ 
+     async def close(self) -> None:
+         """Closes the WebSocket connection."""
+-        if self._ws is not None:
+-            try:
+-                await self._ws.close()
+-            except Exception:
+-                pass
+-            self._ws = None
++        async with self._lock:
++            if self._ws is not None:
++                try:
++                    await self._ws.close()
++                except Exception:
++                    pass
++                self._ws = None
+ 
+ 
+ class BrowserTool:
+@@ -173,14 +220,16 @@
+         transport: ZenohClient | None = None,
+         cdp_client: AsyncCdpClient | None = None,
+         cdp_url: str = "http://127.0.0.1:9222",
++        max_size: int | None = DEFAULT_MAX_WS_PAYLOAD_SIZE,
+     ):
+         self.transport = transport
+         self.cdp_url = cdp_url
++        self.max_size = max_size
+         self._cdp_client = cdp_client
+ 
+     async def _get_cdp(self) -> AsyncCdpClient:
+         if self._cdp_client is None:
+-            self._cdp_client = AsyncCdpClient(self.cdp_url)
++            self._cdp_client = AsyncCdpClient(self.cdp_url, max_size=self.max_size)
+         return self._cdp_client
+ 
+     async def navigate(self, url: str) -> dict[str, Any]:

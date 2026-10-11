@@ -3,9 +3,8 @@
 .aura/logs/
 .aura/artifacts/
 .aura/traces/
-
-# Customizations (Prevent self-modification loops)
-.agents/
+.aura/run/
+.aura/scratch/
 
 # Compiled Binaries and Libraries
 *.wasm
@@ -22,6 +21,7 @@ mock_data/
 
 # Rust build outputs
 target/
+**/target/
 *.rlib
 **/*.rs.bk
 pkg/
@@ -40,6 +40,7 @@ lcov.info
 venv/
 env/
 __pycache__/
+**/__pycache__/
 *.pyc
 *.py[cod]
 *$py.class
@@ -47,11 +48,17 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
+**/.pytest_cache/
 .mypy_cache/
+**/.mypy_cache/
 .ruff_cache/
+**/.ruff_cache/
 .tox/
 .nox/
 .hypothesis/
+.direnv/
+.env.local
+.env.*.local
 
 # MicroVM and Firecracker disk images
 rootfs/
@@ -62,6 +69,7 @@ rootfs/
 firecracker.log
 jailer.log
 *.sock
+**/*.sock
 jailer/
 chroot/
 *.tap
@@ -78,7 +86,11 @@ deploy/images/output/
 *.sqlite-wal
 *.db
 *.log
+**/*.log
+*.tmp
+**/*.tmp
 audit.log
+.agents/audit.log
 
 # Node & package manager directories
 node_modules/
@@ -92,3 +104,10 @@ node_modules/
 *~
 .DS_Store
 Thumbs.db
+.Spotlight-V100
+.Trashes
+Desktop.ini
+*.orig
+*.rej
+.project
+.settings/

@@ -1,3 +1,21 @@
+//! # WASI 0.3 WebAssembly Hypervisor (EXE-WASM-001 - 008, GAP-003)
+//!
+//! ## GAP-003: WASI 0.3 Component Model Dynamic Linking Limitation
+//! Standard WASI 0.3 currently lacks standardized dynamic runtime hot-linking of newly
+//! generated WebAssembly components into an existing host process without pre-composition
+//! or host restart. This represents an upstream Bytecode Alliance specification boundary.
+//!
+//! ### Architectural Mitigation (Static WIT Linking)
+//! Aura enforces deploy-time static WIT component composition:
+//! - Component interfaces (`aura:fs`, `aura:graph`, `aura:tunnel`, `wasi:cli/run@0.2.0`)
+//!   are pre-compiled and statically linked into `wasmtime::component::Linker` at startup.
+//! - Strict instruction fuel metering and pooling instance allocators are enforced per invocation.
+//!
+//! ### Roadmap to WASI Component Model 1.0
+//! When the Bytecode Alliance formally stabilizes the dynamic runtime component linking
+//! specification in WASI Component Model 1.0, Aura will introduce a dynamic component registry
+//! adapter to support on-the-fly component composition without host restart.
+
 use crate::config::WasmConfig;
 use crate::identity::{
     enforcer::{Capability, CapabilityEnforcer},
@@ -62,7 +80,11 @@ impl WasiView for WasmState {
     }
 }
 
-/// Builds an asynchronous WASI Component Model linker (EXE-WASM-007).
+/// Builds an asynchronous WASI Component Model linker (EXE-WASM-007, GAP-003).
+///
+/// Under the GAP-003 static WIT linking mitigation, all component interfaces are
+/// bound ahead of time into this Linker. Dynamic runtime hot-linking is deferred
+/// until WASI Component Model 1.0 dynamic linking is standardized upstream.
 pub fn create_linker(
     engine: &Engine,
 ) -> Result<wasmtime::component::Linker<WasmState>, Box<dyn std::error::Error>> {
@@ -89,7 +111,10 @@ pub fn build_wasi_state(svid: Svid) -> Result<WasmState, Box<dyn std::error::Err
     })
 }
 
-/// Executes a WASI 0.3 WebAssembly component with fuel metering (EXE-WASM-001 - 008).
+/// Executes a WASI 0.3 WebAssembly component with fuel metering (EXE-WASM-001 - 008, GAP-003).
+///
+/// Uses the static WIT Linker mitigation (GAP-003) to instantiate pre-composed components
+/// within sub-millisecond execution budgets while preventing dynamic linking traps.
 pub async fn execute_component(
     engine: &Engine,
     component_bytes: &[u8],
