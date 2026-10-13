@@ -83,7 +83,7 @@ pub struct SemanticCache {
 
 impl SemanticCache {
     /// Opens an in-memory SQLite database with sqlite-vec registered.
-    pub fn open_in_memory() -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn open_in_memory() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         register_sqlite_vec();
         let conn = Connection::open_in_memory()?;
         let cache = Self {
@@ -96,7 +96,7 @@ impl SemanticCache {
     /// Opens a file-backed SQLite database with sqlite-vec registered.
     pub fn open_file<P: AsRef<std::path::Path>>(
         path: P,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         register_sqlite_vec();
         let conn = Connection::open(path)?;
         let cache = Self {
@@ -107,14 +107,14 @@ impl SemanticCache {
     }
 
     /// Returns the sqlite-vec extension version string.
-    pub fn vec_version(&self) -> Result<String, Box<dyn std::error::Error>> {
+    pub fn vec_version(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.conn.lock().unwrap();
         let version: String = conn.query_row("SELECT vec_version()", [], |r| r.get(0))?;
         Ok(version)
     }
 
     /// Initializes tables and indexes for semantic prompt caching.
-    pub fn init_schema(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn init_schema(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "CREATE TABLE IF NOT EXISTS semantic_cache (
@@ -149,7 +149,7 @@ impl SemanticCache {
         completion: &str,
         embedding: Option<&[f32]>,
         metadata: Option<&serde_json::Value>,
-    ) -> Result<i64, Box<dyn std::error::Error>> {
+    ) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
         let prompt_hash = Self::hash_prompt(prompt);
         let embedding_json = embedding.map(|emb| serde_json::to_string(emb).unwrap_or_default());
         let metadata_json = metadata.map(|m| serde_json::to_string(m).unwrap_or_default());
@@ -181,7 +181,7 @@ impl SemanticCache {
         &self,
         tenant_id: &str,
         prompt: &str,
-    ) -> Result<Option<CacheLookupResponse>, Box<dyn std::error::Error>> {
+    ) -> Result<Option<CacheLookupResponse>, Box<dyn std::error::Error + Send + Sync>> {
         let hash = Self::hash_prompt(prompt);
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -209,7 +209,7 @@ impl SemanticCache {
         tenant_id: &str,
         query_embedding: &[f32],
         threshold: f64,
-    ) -> Result<Option<CacheLookupResponse>, Box<dyn std::error::Error>> {
+    ) -> Result<Option<CacheLookupResponse>, Box<dyn std::error::Error + Send + Sync>> {
         let embedding_json = serde_json::to_string(query_embedding)?;
         let conn = self.conn.lock().unwrap();
 
@@ -272,7 +272,7 @@ impl SemanticCache {
         self: Arc<Self>,
         session: Arc<Session>,
         topic_pattern: Option<&str>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let pattern = topic_pattern.unwrap_or("aura/**/cache/lookup").to_string();
         let subscriber = session
             .declare_subscriber(&pattern)
@@ -294,25 +294,31 @@ impl SemanticCache {
                 let payload_str = String::from_utf8_lossy(&payload_bytes);
 
                 if let Ok(req) = serde_json::from_str::<CacheLookupRequest>(&payload_str) {
+                    let cache_clone = Arc::clone(&cache);
+                    let session_clone = Arc::clone(&session_clone);
+
                     if req.action.as_deref() == Some("store") {
-                        if let Some(ref comp) = req.completion {
-                            let _ = cache.put(
-                                &req.tenant_id,
-                                &req.prompt,
-                                comp,
-                                req.embedding.as_deref(),
-                                req.metadata.as_ref(),
-                            );
+                        if let Some(comp) = req.completion.clone() {
+                            let _ = tokio::task::spawn_blocking(move || {
+                                cache_clone.put(
+                                    &req.tenant_id,
+                                    &req.prompt,
+                                    &comp,
+                                    req.embedding.as_deref(),
+                                    req.metadata.as_ref(),
+                                )
+                            }).await;
                         }
                         continue;
                     }
 
-                    let resp = cache.lookup(&req);
+                    let reply_topic = req.reply_topic.clone().unwrap_or_else(|| format!("aura/{}/cache/result", req.tenant_id));
 
-                    if let Ok(resp_json) = serde_json::to_string(&resp) {
-                        let reply_topic = req
-                            .reply_topic
-                            .unwrap_or_else(|| format!("aura/{}/cache/result", req.tenant_id));
+                    let resp = tokio::task::spawn_blocking(move || {
+                        cache_clone.lookup(&req)
+                    }).await;
+
+                    if let Ok(Ok(resp_json)) = resp.map(|r| serde_json::to_string(&r)) {
                         let _ = session_clone.put(reply_topic, resp_json).res_async().await;
                     }
                 }
@@ -332,13 +338,16 @@ impl SemanticCache {
                 let payload_bytes = sample.payload.contiguous();
                 let payload_str = String::from_utf8_lossy(&payload_bytes);
                 if let Ok(store_req) = serde_json::from_str::<CacheStoreRequest>(&payload_str) {
-                    let _ = cache_store.put(
-                        &store_req.tenant_id,
-                        &store_req.prompt,
-                        &store_req.completion,
-                        store_req.embedding.as_deref(),
-                        store_req.metadata.as_ref(),
-                    );
+                    let cache_store_clone = Arc::clone(&cache_store);
+                    let _ = tokio::task::spawn_blocking(move || {
+                        let _ = cache_store_clone.put(
+                            &store_req.tenant_id,
+                            &store_req.prompt,
+                            &store_req.completion,
+                            store_req.embedding.as_deref(),
+                            store_req.metadata.as_ref(),
+                        );
+                    }).await;
                 }
             }
         });
@@ -445,7 +454,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn test_zenoh_cache_lookup_flow() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_zenoh_cache_lookup_flow() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let cache = Arc::new(SemanticCache::open_in_memory()?);
         cache.put(
             "tenant-zenoh",
