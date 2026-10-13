@@ -1,0 +1,3 @@
+## 2024-10-10 - [aura-core] Async Execution Starvation by Synchronous SQLite Queries
+**Learning:** Found that `aura-core` Zenoh subscribers (`start_zenoh_listener`) execute blocking `rusqlite` commands (`cache.put`, `cache.lookup`) inside the `tokio` async runtime. This causes severe Tokio worker thread starvation under high cache query throughput because the underlying SQLite operations do not yield control back to the async executor.
+**Action:** Always wrap blocking SQLite operations in `tokio::task::spawn_blocking`. Make sure that any error types mapped inside `spawn_blocking` properly implement `Send + Sync` (e.g., mapping to `Result<T, Box<dyn Error + Send + Sync>>`) to bypass compiler lifetime/Send constraints when moved across Tokio worker pool threads.

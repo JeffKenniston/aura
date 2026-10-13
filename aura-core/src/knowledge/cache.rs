@@ -295,25 +295,42 @@ impl SemanticCache {
 
                 if let Ok(req) = serde_json::from_str::<CacheLookupRequest>(&payload_str) {
                     if req.action.as_deref() == Some("store") {
-                        if let Some(ref comp) = req.completion {
-                            let _ = cache.put(
-                                &req.tenant_id,
-                                &req.prompt,
-                                comp,
-                                req.embedding.as_deref(),
-                                req.metadata.as_ref(),
-                            );
+                        if let Some(comp) = req.completion {
+                            let cache_clone = Arc::clone(&cache);
+                            let tenant_id = req.tenant_id.clone();
+                            let prompt = req.prompt.clone();
+                            let embedding = req.embedding.clone();
+                            let metadata = req.metadata.clone();
+
+                            // PERF: Offload blocking SQLite I/O to a dedicated thread pool using `spawn_blocking`.
+                            // Complexity impact: O(1) event loop overhead instead of O(latency) blockage,
+                            // preventing Tokio worker thread starvation during slow cache ingestion.
+                            let _ = tokio::task::spawn_blocking(move || {
+                                let _ = cache_clone.put(
+                                    &tenant_id,
+                                    &prompt,
+                                    &comp,
+                                    embedding.as_deref(),
+                                    metadata.as_ref(),
+                                );
+                            }).await;
                         }
                         continue;
                     }
 
-                    let resp = cache.lookup(&req);
+                    let cache_clone = Arc::clone(&cache);
+                    let reply_topic = req
+                        .reply_topic
+                        .clone()
+                        .unwrap_or_else(|| format!("aura/{}/cache/result", req.tenant_id));
 
-                    if let Ok(resp_json) = serde_json::to_string(&resp) {
-                        let reply_topic = req
-                            .reply_topic
-                            .unwrap_or_else(|| format!("aura/{}/cache/result", req.tenant_id));
-                        let _ = session_clone.put(reply_topic, resp_json).res_async().await;
+                    // PERF: Offload blocking SQLite vector similarity search to a dedicated thread pool.
+                    // Complexity impact: Shifts O(N) vector comparisons (where N is the number of cache entries)
+                    // out of the async executor, ensuring high-throughput Zenoh message ingestion isn't bottlenecked.
+                    if let Ok(resp) = tokio::task::spawn_blocking(move || cache_clone.lookup(&req)).await {
+                        if let Ok(resp_json) = serde_json::to_string(&resp) {
+                            let _ = session_clone.put(reply_topic, resp_json).res_async().await;
+                        }
                     }
                 }
             }
@@ -332,13 +349,18 @@ impl SemanticCache {
                 let payload_bytes = sample.payload.contiguous();
                 let payload_str = String::from_utf8_lossy(&payload_bytes);
                 if let Ok(store_req) = serde_json::from_str::<CacheStoreRequest>(&payload_str) {
-                    let _ = cache_store.put(
-                        &store_req.tenant_id,
-                        &store_req.prompt,
-                        &store_req.completion,
-                        store_req.embedding.as_deref(),
-                        store_req.metadata.as_ref(),
-                    );
+                    let cache_store_clone = Arc::clone(&cache_store);
+                    // PERF: Offload blocking SQLite I/O to a dedicated thread pool using `spawn_blocking`.
+                    // Complexity impact: O(1) event loop overhead instead of O(latency) blockage.
+                    let _ = tokio::task::spawn_blocking(move || {
+                        let _ = cache_store_clone.put(
+                            &store_req.tenant_id,
+                            &store_req.prompt,
+                            &store_req.completion,
+                            store_req.embedding.as_deref(),
+                            store_req.metadata.as_ref(),
+                        );
+                    }).await;
                 }
             }
         });
