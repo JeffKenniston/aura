@@ -11,6 +11,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
+use std::sync::LazyLock;
 
 // ============================================================================
 // IAM-004 & IAM-005: Capability Scopes & Scoped SVID Enums
@@ -417,25 +418,28 @@ impl CapabilityEnforcer {
         svid: &Svid,
         action_str: &str,
     ) -> Result<bool, Box<dyn std::error::Error>> {
-        let policy_source = r#"
-            permit(
-                principal,
-                action,
-                resource
-            ) when {
-                principal.is_trusted == true
-            };
-            
-            permit(
-                principal,
-                action,
-                resource
-            ) when {
-                principal.has_scope == true
-            };
-        "#;
+        static CEDAR_POLICIES: LazyLock<PolicySet> = LazyLock::new(|| {
+            let policy_source = r#"
+                permit(
+                    principal,
+                    action,
+                    resource
+                ) when {
+                    principal.is_trusted == true
+                };
 
-        let policies = PolicySet::from_str(policy_source)?;
+                permit(
+                    principal,
+                    action,
+                    resource
+                ) when {
+                    principal.has_scope == true
+                };
+            "#;
+            PolicySet::from_str(policy_source).expect("Static cedar policy should compile")
+        });
+
+        let policies = &*CEDAR_POLICIES;
 
         let principal_uid = EntityUid::from_type_name_and_id(
             EntityTypeName::from_str("Agent")?,
@@ -478,7 +482,7 @@ impl CapabilityEnforcer {
         let entities = Entities::from_json_str(&entities_json, None)?;
 
         let authorizer = Authorizer::new();
-        let answer = authorizer.is_authorized(&req, &policies, &entities);
+        let answer = authorizer.is_authorized(&req, policies, &entities);
 
         Ok(answer.decision() == Decision::Allow)
     }
