@@ -290,32 +290,45 @@ impl SemanticCache {
                 pattern_display
             );
             while let Ok(sample) = subscriber.recv_async().await {
-                let payload_bytes = sample.payload.contiguous();
-                let payload_str = String::from_utf8_lossy(&payload_bytes);
+                let cache_clone = Arc::clone(&cache);
+                let session_clone = Arc::clone(&session_clone);
 
-                if let Ok(req) = serde_json::from_str::<CacheLookupRequest>(&payload_str) {
-                    if req.action.as_deref() == Some("store") {
-                        if let Some(ref comp) = req.completion {
-                            let _ = cache.put(
-                                &req.tenant_id,
-                                &req.prompt,
-                                comp,
-                                req.embedding.as_deref(),
-                                req.metadata.as_ref(),
-                            );
+                tokio::spawn(async move {
+                    let payload_bytes = sample.payload.contiguous();
+                    if let Ok(req) = serde_json::from_slice::<CacheLookupRequest>(&payload_bytes) {
+                        if req.action.as_deref() == Some("store") {
+                            if let Some(comp) = req.completion {
+                                let _ = tokio::task::spawn_blocking(move || {
+                                    let _ = cache_clone.put(
+                                        &req.tenant_id,
+                                        &req.prompt,
+                                        &comp,
+                                        req.embedding.as_deref(),
+                                        req.metadata.as_ref(),
+                                    );
+                                }).await;
+                            }
+                            return;
                         }
-                        continue;
-                    }
 
-                    let resp = cache.lookup(&req);
-
-                    if let Ok(resp_json) = serde_json::to_string(&resp) {
                         let reply_topic = req
                             .reply_topic
+                            .clone()
                             .unwrap_or_else(|| format!("aura/{}/cache/result", req.tenant_id));
-                        let _ = session_clone.put(reply_topic, resp_json).res_async().await;
+
+                        let cache_clone2 = Arc::clone(&cache_clone);
+
+                        let resp = tokio::task::spawn_blocking(move || {
+                            cache_clone2.lookup(&req)
+                        }).await;
+
+                        if let Ok(resp) = resp {
+                            if let Ok(resp_json) = serde_json::to_string(&resp) {
+                                let _ = session_clone.put(reply_topic, resp_json).res_async().await;
+                            }
+                        }
                     }
-                }
+                });
             }
         });
 
@@ -329,17 +342,22 @@ impl SemanticCache {
         let cache_store = Arc::clone(&self);
         tokio::spawn(async move {
             while let Ok(sample) = store_subscriber.recv_async().await {
-                let payload_bytes = sample.payload.contiguous();
-                let payload_str = String::from_utf8_lossy(&payload_bytes);
-                if let Ok(store_req) = serde_json::from_str::<CacheStoreRequest>(&payload_str) {
-                    let _ = cache_store.put(
-                        &store_req.tenant_id,
-                        &store_req.prompt,
-                        &store_req.completion,
-                        store_req.embedding.as_deref(),
-                        store_req.metadata.as_ref(),
-                    );
-                }
+                let cache_store_clone = Arc::clone(&cache_store);
+
+                tokio::spawn(async move {
+                    let payload_bytes = sample.payload.contiguous();
+                    if let Ok(store_req) = serde_json::from_slice::<CacheStoreRequest>(&payload_bytes) {
+                        let _ = tokio::task::spawn_blocking(move || {
+                            let _ = cache_store_clone.put(
+                                &store_req.tenant_id,
+                                &store_req.prompt,
+                                &store_req.completion,
+                                store_req.embedding.as_deref(),
+                                store_req.metadata.as_ref(),
+                            );
+                        }).await;
+                    }
+                });
             }
         });
 
