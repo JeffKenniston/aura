@@ -1,0 +1,107 @@
+--- a/aura-sdk/aura_sdk/tools/computer.py
++++ b/aura-sdk/aura_sdk/tools/computer.py
+@@ -248,45 +248,64 @@
+ 
+     @property
+     def is_connected(self) -> bool:
+-        return self._writer is not None and not self._writer.is_closing()
++        if self._writer is None or self._reader is None:
++            return False
++        return not (self._writer.is_closing() or self._reader.at_eof())
+ 
+     async def connect(self) -> None:
+         async with self._lock:
+             await self._connect_locked()
+ 
++    async def _close_locked(self) -> None:
++        """Closes stream reader and writer, resetting connection state while holding lock."""
++        if self._writer is not None:
++            try:
++                self._writer.close()
++                await self._writer.wait_closed()
++            except Exception:  # noqa: BLE001, S110
++                pass
++            self._writer = None
++        self._reader = None
++
+     async def _connect_locked(self) -> None:
+         if self.is_connected:
+             return
++        await self._close_locked()
+         self._reader, self._writer = await asyncio.wait_for(
+             asyncio.open_connection(self.host, self.port), timeout=self.timeout
+         )
+ 
+     async def send_command(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+         async with self._lock:
+-            if not self.is_connected:
+-                await self._connect_locked()
+-            assert self._reader is not None
+-            assert self._writer is not None
+-
+-            self._msg_id += 1
+-            cmd_id = self._msg_id
+-            payload = {
+-                "jsonrpc": "2.0",
+-                "id": cmd_id,
+-                "method": method,
+-                "params": params or {},
+-            }
+-            raw_line = json.dumps(payload) + "\n"
+-            self._writer.write(raw_line.encode("utf-8"))
+-            await self._writer.drain()
+-
+-            line_bytes = await asyncio.wait_for(
+-                self._reader.readline(), timeout=self.timeout
+-            )
+-            if not line_bytes:
+-                raise ConnectionResetError("Connection closed by computer daemon")
++            try:
++                if not self.is_connected:
++                    await self._connect_locked()
++                assert self._reader is not None
++                assert self._writer is not None
++
++                self._msg_id += 1
++                cmd_id = self._msg_id
++                payload = {
++                    "jsonrpc": "2.0",
++                    "id": cmd_id,
++                    "method": method,
++                    "params": params or {},
++                }
++                raw_line = json.dumps(payload) + "\n"
++                self._writer.write(raw_line.encode("utf-8"))
++                await self._writer.drain()
++
++                line_bytes = await asyncio.wait_for(
++                    self._reader.readline(), timeout=self.timeout
++                )
++                if not line_bytes:
++                    raise ConnectionResetError("Connection closed by computer daemon")
++
++                resp = json.loads(line_bytes.decode("utf-8").strip())
++            except Exception:
++                await self._close_locked()
++                raise
+ 
+-            resp = json.loads(line_bytes.decode("utf-8").strip())
+             if "error" in resp and resp["error"] is not None:
+                 err = resp["error"]
+                 msg = err.get("message", "Unknown error")
+@@ -297,14 +316,7 @@
+ 
+     async def close(self) -> None:
+         async with self._lock:
+-            if self._writer is not None:
+-                try:
+-                    self._writer.close()
+-                    await self._writer.wait_closed()
+-                except Exception:
+-                    pass
+-                self._writer = None
+-                self._reader = None
++            await self._close_locked()
+ 
+ 
+ class ComputerTool:

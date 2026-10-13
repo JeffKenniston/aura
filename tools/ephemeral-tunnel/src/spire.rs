@@ -169,4 +169,27 @@ impl EphemeralTunnelService {
             .map(|m| m.redacted_token())
             .unwrap_or_else(|| "[REDACTED-TOKEN]".to_string())
     }
+
+    /// Checks whether an ephemeral token exists and is currently marked as revoked.
+    pub fn is_revoked(&self, token: &str) -> bool {
+        self.tokens
+            .lock()
+            .map(|l| l.get(token).map(|m| m.revoked).unwrap_or(false))
+            .unwrap_or(false)
+    }
+
+    /// Returns the number of unrevoked active credentials in the registry.
+    pub fn active_token_count(&self) -> usize {
+        self.tokens
+            .lock()
+            .map(|l| l.values().filter(|m| !m.revoked).count())
+            .unwrap_or(0)
+    }
+
+    /// Clears all tracked tokens in the registry (primarily used for test harness reset).
+    pub fn clear_tokens(&self) {
+        if let Ok(mut lock) = self.tokens.lock() {
+            lock.clear();
+        }
+    }
 }

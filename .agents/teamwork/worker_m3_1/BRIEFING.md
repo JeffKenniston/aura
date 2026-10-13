@@ -1,64 +1,80 @@
-# BRIEFING — 2026-10-11T03:58:30Z
+# BRIEFING — 2026-10-12T00:44:00Z
 
 ## Mission
-Implement Milestone 3 tasks: BUS-003, EXE-VM-002, EXE-VM-011 in aura-core with full test verification and genuine implementation.
+Implement Milestone 3: Microkernel Zero-Trust Security & Storage Encryption (Features 13-17) in Aura.
 
 ## 🔒 My Identity
 - Archetype: teamwork_preview_worker
 - Roles: implementer, qa, specialist
-- Working directory: /home/jeff/aura/.agents/teamwork/worker_m3_1/
-- Original parent: b0e73c5b-179f-432b-9bbd-ebac6eea2996
-- Milestone: Milestone 3 (BUS-003, EXE-VM-002, EXE-VM-011)
+- Working directory: /home/jeff/aura/.agents/teamwork/worker_m3_1
+- Original parent: 1732b97a-66c1-4a05-9f2b-afc669944583
+- Milestone: Milestone 3
 
 ## 🔒 Key Constraints
-- Verification Gates: Code must be production-ready. ABSOLUTELY NO mocks, stubs, or TODOs.
-- Circuit Breaker: If a task fails or errors continuously, do not blindly retry permutations. Halt and ask the user for clarification.
-- Minimal change principle.
-- Full independent verification.
+- File Write Ownership (Exclusive):
+  - aura-core/Cargo.toml
+  - aura-core/src/lib.rs
+  - aura-core/src/hypervisor/firecracker.rs
+  - aura-core/src/hypervisor/mod.rs
+  - aura-core/src/hypervisor/proxy.rs
+  - aura-core/src/storage/mod.rs
+  - aura-core/src/storage/encrypted.rs
+  - aura-core/src/storage/ledger.rs
+- Production-ready code: ABSOLUTELY NO mocks, stubs, or TODOs.
+- Real state and real behavior — no hardcoded verification strings or bypasses.
+- Run all verification gates cleanly.
 
 ## Current Parent
-- Conversation ID: b0e73c5b-179f-432b-9bbd-ebac6eea2996
-- Updated: 2026-10-11T03:36:27Z
+- Conversation ID: 1732b97a-66c1-4a05-9f2b-afc669944583
+- Updated: 2026-10-12T00:44:00Z
 
 ## Task Summary
 - **What to build**:
-  1. BUS-003: In `aura-core/src/bus/mod.rs`, enhance `TaskPayload` & `TaskResult`, dynamic SVID extraction, capability validation & rate limiting, genuine execution dispatch via Registry/sandboxes.
-  2. EXE-VM-002: In `aura-core/src/hypervisor/firecracker.rs` & `mod.rs`, implement `validate_kvm_support()` with `AURA_SKIP_KVM_VALIDATION` override, integrate into `init_firecracker()`, unit tests.
-  3. EXE-VM-011: In `aura-core/src/hypervisor/firecracker.rs`, configure rootfs drive with `"is_read_only": true`, kernel args with `ro root=/dev/vda`, support ephemeral scratch disk attachment, and unit tests.
-- **Success criteria**: cargo check --all-targets and cargo test -p aura-core pass with 0 warnings and 0 failures; zero mocks/stubs; handoff report written.
-- **Interface contracts**: /home/jeff/aura/.agents/teamwork/orchestrator_7/PROJECT.md
-- **Code layout**: aura-core/src/
+  1. Add dependencies `aes-gcm = "0.10.3"` and `rusqlite` features `["backup", "serialize"]` in `aura-core/Cargo.toml`.
+  2. Implement `VsockStreamConfig`, `VsockStreamError`, and bounded stream reading `read_stream_with_limit` in `aura-core/src/hypervisor/firecracker.rs` + tests.
+  3. Wire `egress_proxy: Option<EgressProxyHandle>` into `FirecrackerVm` and re-export egress proxy types in `aura-core/src/hypervisor/mod.rs`.
+  4. Implement `storage` module in `aura-core`: `encrypted.rs` (BLAKE3 SVID key derivation, AES-256-GCM envelope encryption, in-memory SQLite serialize/deserialize, atomic flush) and `ledger.rs` (`TaskLedger`, `TaskEvent`, `TaskState`).
+  5. Add unit tests covering key derivation, roundtrip encryption/decryption, tampering rejection, and raw disk byte opacity inspection.
+- **Success criteria**:
+  - Full test suite passes: `cargo test -p aura-core --jobs 1`, `cargo test -p aura-core --test m5_e2e_opaque_test`, etc.
+  - Zero mocks, stubs, or TODOs.
+- **Interface contracts**: PROJECT.md, ORIGINAL_REQUEST.md
+- **Code layout**: PROJECT.md
 
 ## Key Decisions Made
-- Promoted `wat = "1.261.0"` to main dependencies in `aura-core/Cargo.toml` for genuine in-memory compilation of WebAssembly text format.
-- Mapped all non-Send errors to `String` via `.map_err(|e| e.to_string())` to satisfy Tokio task spawning constraints.
-- Retained `TaskResult.result` string formatting for backward compatibility while providing full structured telemetry (`stdout`, `stderr`, `exit_code`, `duration_ms`).
-- In `extract_svid`, explicitly preserve empty string tokens so `validate_svid("")` accurately denies unauthorized callers.
+- `EncryptedDatabase` uses `rusqlite::Connection::open_in_memory()`. For deserialization from disk ciphertext, allocates SQLite-managed buffer via `rusqlite::ffi::sqlite3_malloc64` and passes ownership via `rusqlite::serialize::OwnedData` into `conn.deserialize(DatabaseName::Main, owned, false)`.
+- When creating a fresh database in memory, initializes SQLite page 1 via `PRAGMA user_version = 0;` so that subsequent `conn.serialize()` succeeds and writes a valid encrypted SQLite image.
+- `TaskLedger` wraps `Arc<EncryptedDatabase>`, creating `task_events` table and index if not exists, appending events with immediate atomic `db.flush()`, and querying chronologically by event id.
+- `read_stream_with_limit` and `read_stream_with_limit_ext` enforce `VsockStreamConfig::max_buffer_bytes`, chunking reads in 64KB buffers and immediately truncating any stream exceeding the limit.
+- `FirecrackerVm` holds `egress_proxy: Option<EgressProxyHandle>`, manages start/stop, and cleans it up via RAII in `teardown()` and `Drop`.
 
 ## Artifact Index
-- /home/jeff/aura/.agents/teamwork/worker_m3_1/DISPATCH.md — Task assignment
-- /home/jeff/aura/.agents/teamwork/worker_m3_1/BRIEFING.md — Situational awareness
-- /home/jeff/aura/.agents/teamwork/worker_m3_1/progress.md — Liveness & progress tracking
-- /home/jeff/aura/.agents/teamwork/worker_m3_1/handoff.md — 5-component handoff report
+- DISPATCH.md — Initial dispatch assignment
+- progress.md — Liveness heartbeat and step tracker
+- handoff.md — 5-component completion report
 
 ## Change Tracker
 - **Files modified**:
-  - `aura-core/Cargo.toml`: Promoted wat to main dependencies
-  - `aura-core/src/hypervisor/firecracker.rs`: KVM validation, typed KvmError, read-only rootfs, ephemeral scratch disk
-  - `aura-core/src/hypervisor/mod.rs`: Re-exports and init_firecracker integration
-  - `aura-core/src/bus/mod.rs`: TaskPayload/TaskResult enhancements, 4-tier SVID extraction, genuine Wasmtime/Firecracker dispatch, Zero-Trust checks
-- **Build status**: Passed (`cargo check --all-targets` exit 0, `cargo test -p aura-core` 128 passed, 0 failed)
-- **Pending issues**: None
+  - `aura-core/Cargo.toml`: Added `aes-gcm = "0.10.3"`, enabled rusqlite `backup` and `serialize` features.
+  - `aura-core/src/hypervisor/firecracker.rs`: Added `VsockStreamConfig`, `VsockStreamError`, `read_stream_with_limit`, `read_stream_with_limit_ext`, `start_screenshot_listener_with_config`, `FirecrackerVm` egress proxy fields/methods, and comprehensive unit tests.
+  - `aura-core/src/hypervisor/proxy.rs`: Made test helper module `pub(crate)` for cross-module integration tests.
+  - `aura-core/src/hypervisor/mod.rs`: Re-exported `EgressProxy`, `EgressProxyConfig`, `EgressProxyHandle`, `TLS_ALERT_ACCESS_DENIED`, `read_stream_with_limit`, etc.
+  - `aura-core/src/lib.rs`: Registered `pub mod storage;`.
+  - `aura-core/src/storage/mod.rs`: Defined storage module with re-exports and comprehensive unit tests.
+  - `aura-core/src/storage/encrypted.rs`: Implemented `CryptoEnvelope`, `derive_storage_key`, `EncryptedDatabase`, `StorageError`.
+  - `aura-core/src/storage/ledger.rs`: Implemented `TaskState`, `TaskEvent`, `TaskLedger`.
+- **Build status**: Pass (all 6 gates clean).
+- **Pending issues**: None.
 
 ## Quality Status
-- **Build/test result**: 128 passed, 0 failed, 0 ignored (Exit 0)
-- **Lint status**: Clean on all modified files
-- **Tests added/modified**: 11 new/enhanced tests covering KVM validation, read-only rootfs, scratch disk cleanup, 4-tier SVID extraction, rate limiting, and authentic execution
+- **Build/test result**: All passing (154/154 aura-core lib, 170/170 opaque tests, 39/39 daemon, 14/14 tunnel, 107/107 pytest).
+- **Lint status**: Zero violations (ruff check passed).
+- **Tests added/modified**: Full unit tests covering vsock limits, egress proxy lifecycle, key derivation, AES-256-GCM envelope encryption, tamper detection, and raw disk byte opacity.
 
 ## Loaded Skills
-- **Source**: /home/jeff/aura/.agents/plugins/aura-dev-kit/skills/aura-bus-domain/SKILL.md
-  - **Local copy**: /home/jeff/aura/.agents/teamwork/worker_m3_1/skills/aura-bus-domain/SKILL.md
-  - **Core methodology**: Zenoh Event Bus constraints, topic schemas, task dispatch
-- **Source**: /home/jeff/aura/.agents/plugins/aura-dev-kit/skills/aura-exe-vm-domain/SKILL.md
-  - **Local copy**: /home/jeff/aura/.agents/teamwork/worker_m3_1/skills/aura-exe-vm-domain/SKILL.md
-  - **Core methodology**: MicroVM Runtime constraints, Firecracker jailer, drive config, KVM validation
+- Source: /home/jeff/aura/.agents/plugins/aura-dev-kit/skills/aura-host-domain/SKILL.md
+  - Local copy: /home/jeff/aura/.agents/teamwork/worker_m3_1/aura-host-domain_SKILL.md
+  - Core methodology: Execution Host constraints, hypervisor lifecycle, and isolation invariants.
+- Source: /home/jeff/aura/.agents/plugins/aura-dev-kit/skills/aura-iam-domain/SKILL.md
+  - Local copy: /home/jeff/aura/.agents/teamwork/worker_m3_1/aura-iam-domain_SKILL.md
+  - Core methodology: Identity & SPIFFE SVID zero-trust verification and key derivation invariants.

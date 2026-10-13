@@ -8,6 +8,80 @@ use std::sync::{Arc, Mutex};
 /// Error identifier returned when repository drift / concurrent modifications are detected.
 pub const CONFLICT_DETECTED: &str = "ConflictDetected";
 
+/// RAII Drop Guard ensuring an ephemeral token is revoked upon task completion,
+/// early error exit, or drop (IAM-004, TOOL-ET-003, PROJECT Feature 4).
+#[derive(Debug)]
+pub struct EphemeralTokenGuard<'a> {
+    manager: &'a GitManager,
+    token: Option<String>,
+}
+
+impl<'a> EphemeralTokenGuard<'a> {
+    /// Creates a new `EphemeralTokenGuard` and registers the token into `manager.active_tokens`.
+    pub fn new(manager: &'a GitManager, token: impl Into<String>) -> Result<Self, String> {
+        let token_str = token.into();
+        {
+            let mut active = match manager.active_tokens.lock() {
+                Ok(g) => g,
+                Err(p) => p.into_inner(),
+            };
+            active.insert(token_str.clone());
+        }
+        Ok(Self {
+            manager,
+            token: Some(token_str),
+        })
+    }
+
+    /// Returns the active token string, if not yet revoked.
+    pub fn token(&self) -> Option<&str> {
+        self.token.as_deref()
+    }
+
+    /// Explicitly revokes the token ahead of drop.
+    pub fn revoke(&mut self) -> Result<(), String> {
+        if let Some(token) = self.token.take() {
+            self.manager.revoke_token(&token)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Defuses the guard, preventing automatic revocation upon drop and returning the token.
+    pub fn defuse(&mut self) -> Option<String> {
+        self.token.take()
+    }
+}
+
+impl<'a> std::fmt::Display for EphemeralTokenGuard<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let redacted = self
+            .token
+            .as_ref()
+            .map(|t| {
+                let suffix = if t.len() >= 8 {
+                    &t[t.len() - 8..]
+                } else {
+                    "..."
+                };
+                format!(
+                    "spiffe://aura.local/ephemeral/github/[REDACTED-TOKEN-{}]",
+                    suffix
+                )
+            })
+            .unwrap_or_else(|| "[NONE]".to_string());
+        write!(f, "{}", redacted)
+    }
+}
+
+impl<'a> Drop for EphemeralTokenGuard<'a> {
+    fn drop(&mut self) {
+        if let Some(token) = self.token.take() {
+            let _ = self.manager.revoke_token(&token);
+        }
+    }
+}
+
 /// Manages Git branch isolation, drift detection, sandboxed linting, and ephemeral PR operations.
 #[derive(Clone)]
 pub struct GitManager {
@@ -17,6 +91,7 @@ pub struct GitManager {
     pub authored_files: Arc<Mutex<HashSet<PathBuf>>>,
     pub vm_config: Arc<Mutex<Option<VmConfig>>>,
     pub linter_error: Arc<Mutex<Option<String>>>,
+    pub pr_error: Arc<Mutex<Option<String>>>,
     pub active_tokens: Arc<Mutex<HashSet<String>>>,
     pub revoked_tokens: Arc<Mutex<HashSet<String>>>,
     pub patch_history: Arc<Mutex<Vec<String>>>,
@@ -42,6 +117,7 @@ impl GitManager {
             authored_files: Arc::new(Mutex::new(HashSet::new())),
             vm_config: Arc::new(Mutex::new(None)),
             linter_error: Arc::new(Mutex::new(None)),
+            pr_error: Arc::new(Mutex::new(None)),
             active_tokens: Arc::new(Mutex::new(HashSet::new())),
             revoked_tokens: Arc::new(Mutex::new(HashSet::new())),
             patch_history: Arc::new(Mutex::new(Vec::new())),
@@ -88,6 +164,19 @@ impl GitManager {
     pub fn set_linter_error(&self, err: impl Into<String>) {
         if let Ok(mut linter_guard) = self.linter_error.lock() {
             *linter_guard = Some(err.into());
+        }
+    }
+
+    /// Builder helper to inject explicit PR error for error simulation.
+    pub fn with_pr_error(self, err: impl Into<String>) -> Self {
+        self.set_pr_error(err);
+        self
+    }
+
+    /// Sets an explicit PR error for error simulation.
+    pub fn set_pr_error(&self, err: impl Into<String>) {
+        if let Ok(mut pr_guard) = self.pr_error.lock() {
+            *pr_guard = Some(err.into());
         }
     }
 
@@ -265,52 +354,65 @@ impl GitManager {
 
     /// Implement Ephemeral Tunnel integration for opening Pull Requests.
     ///
-    /// Obtains short-lived credentials for `"github"` via `IdentityManager::mint_ephemeral_svid`,
-    /// creates the pull request, and explicitly revokes credentials upon completion (IAM-004, TOOL-ET-003).
-    pub fn open_pr(&self, title: &str, _body: &str) -> Result<String, String> {
+    /// Validates caller SVID has `"github"` capability scope, mints short-lived
+    /// credentials via `IdentityManager::mint_ephemeral_svid`, creates the pull request,
+    /// and uses an RAII drop guard (`EphemeralTokenGuard`) to guarantee revocation
+    /// upon completion, early error exit, or drop (IAM-004, TOOL-ET-003, PROJECT Feature 4 & 6).
+    pub fn open_pr(
+        &self,
+        caller_svid: &Svid,
+        title: &str,
+        _body: &str,
+    ) -> Result<String, String> {
         let trimmed_title = title.trim();
         if trimmed_title.is_empty() {
             return Err("PR title cannot be empty".to_string());
         }
 
-        // 1. Attest and mint ephemeral child SVID scoped to "github" via IdentityManager
-        let identity_manager = IdentityManager::default();
-        let parent_svid = Svid::new("spiffe://aura.local/agent/git")
-            .with_scopes(vec!["github".to_string(), "tool:ephemeral-tunnel".to_string()]);
+        // 1. Enforce that caller has "github" capability scope before minting ephemeral credentials (IAM-004, Feature 2)
+        if !caller_svid.has_scope("github") {
+            return Err(format!(
+                "Authorization denial: Caller SVID '{}' lacks required 'github' capability scope",
+                caller_svid.id
+            ));
+        }
 
+        // 2. Attest and mint ephemeral child SVID scoped to "github" via IdentityManager
+        let identity_manager = IdentityManager::default();
         let ephemeral_svid = identity_manager
-            .mint_ephemeral_svid(&parent_svid, "pr-creator", &["github".to_string()])
+            .mint_ephemeral_svid(caller_svid, "pr-creator", &["github".to_string()])
             .map_err(|e| format!("Ephemeral credential minting failed: {:?}", e))?;
 
         let token = ephemeral_svid.id.clone();
-        {
-            let mut active = self
-                .active_tokens
-                .lock()
-                .map_err(|e| format!("Lock error: {}", e))?;
-            active.insert(token.clone());
+
+        // 3. Register token with RAII Drop Guard.
+        // Guarantees automatic token revocation on successful completion, early return, or error drop.
+        let _guard = EphemeralTokenGuard::new(self, token)?;
+
+        // 4. Injected failure simulation (e.g. upstream VCS network/API rejection)
+        if let Ok(err_guard) = self.pr_error.lock() {
+            if let Some(ref err) = *err_guard {
+                return Err(err.clone());
+            }
         }
 
-        // 2. Perform PR creation using the dynamic ephemeral token
+        // 5. Perform PR creation using the dynamic ephemeral token
         let pr_result = format!("Opened PR: {}", trimmed_title);
 
-        // 3. Explicit credential revocation immediately upon completion (TOOL-ET-003, IAM-004)
-        self.revoke_token(&token)
-            .map_err(|e| format!("Credential revocation failed: {}", e))?;
-
         Ok(pr_result)
+        // Guard drops here and invokes `revoke_token(&token)` automatically
     }
 
     /// Explicitly revokes an active ephemeral token.
     pub fn revoke_token(&self, token: &str) -> Result<(), String> {
-        let mut active = self
-            .active_tokens
-            .lock()
-            .map_err(|e| format!("Lock error: {}", e))?;
-        let mut revoked = self
-            .revoked_tokens
-            .lock()
-            .map_err(|e| format!("Lock error: {}", e))?;
+        let mut active = match self.active_tokens.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        let mut revoked = match self.revoked_tokens.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
 
         active.remove(token);
         revoked.insert(token.to_string());
@@ -491,10 +593,12 @@ mod tests {
     #[test]
     fn test_open_pr_mints_and_revokes_ephemeral_credentials() {
         let git = GitManager::new("main");
+        let svid = Svid::new("spiffe://aura.local/agent/git")
+            .with_scopes(vec!["github".to_string()]);
         let title = "Feature: AST blast radius integration";
         let body = "Implements recursive CTE blast radius calculation over MCP";
 
-        let res = git.open_pr(title, body);
+        let res = git.open_pr(&svid, title, body);
         assert!(res.is_ok());
         let pr_output = res.unwrap();
         assert_eq!(pr_output, format!("Opened PR: {}", title));
@@ -512,9 +616,68 @@ mod tests {
     #[test]
     fn test_open_pr_rejects_empty_title() {
         let git = GitManager::new("main");
-        let res = git.open_pr("   ", "Body");
+        let svid = Svid::new("spiffe://aura.local/agent/git")
+            .with_scopes(vec!["github".to_string()]);
+        let res = git.open_pr(&svid, "   ", "Body");
         assert!(res.is_err());
         assert_eq!(res.unwrap_err(), "PR title cannot be empty");
+    }
+
+    #[test]
+    fn test_open_pr_enforces_github_scope() {
+        let git = GitManager::new("main");
+        // Caller SVID lacking "github" scope
+        let svid = Svid::new("spiffe://aura.local/agent/unauthorized")
+            .with_scopes(vec!["fs:read".to_string()]);
+
+        let res = git.open_pr(&svid, "PR Title", "Body");
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        assert!(
+            err.contains("Authorization denial") && err.contains("github"),
+            "Expected scope authorization denial, got: {}",
+            err
+        );
+        // Verify no token was minted or active
+        assert_eq!(git.active_tokens.lock().unwrap().len(), 0);
+        assert_eq!(git.revoked_tokens.lock().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_open_pr_revokes_token_on_failed_pr_call() {
+        let git = GitManager::new("main")
+            .with_pr_error("Upstream GitHub API rate limit exceeded");
+        let svid = Svid::new("spiffe://aura.local/agent/git")
+            .with_scopes(vec!["github".to_string()]);
+
+        let res = git.open_pr(&svid, "PR Title", "Body");
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err(), "Upstream GitHub API rate limit exceeded");
+
+        // Verify token revocation on error: active count is 0, revoked count is 1
+        let active_count = git.active_tokens.lock().unwrap().len();
+        let revoked_count = git.revoked_tokens.lock().unwrap().len();
+        assert_eq!(active_count, 0, "Active tokens must be clean after error");
+        assert_eq!(revoked_count, 1, "Minted token must be revoked despite error");
+    }
+
+    #[test]
+    fn test_ephemeral_token_guard_raii_lifecycle() {
+        let git = GitManager::new("main");
+        let token = "spiffe://aura.local/ephemeral/github/test-token-uuid-1234";
+
+        {
+            let guard = EphemeralTokenGuard::new(&git, token).expect("Failed to create guard");
+            assert_eq!(guard.token(), Some(token));
+            assert!(git.is_token_active(token));
+            assert!(!git.is_token_revoked(token));
+            let display_str = format!("{}", guard);
+            assert!(display_str.contains("[REDACTED-TOKEN-"));
+            assert!(!display_str.contains("test-token-uuid-1234"));
+        }
+
+        assert!(!git.is_token_active(token));
+        assert!(git.is_token_revoked(token));
     }
 
     #[test]

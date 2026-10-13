@@ -1,64 +1,80 @@
-# Dispatch for Worker M2_1
+## 2026-10-11T18:59:22Z
+You are worker_m2_1, a teamwork_preview_worker implementing Milestone 2: Sandboxed GUI Automation & Visual Redaction (Features 7-12) for Phase M5 (Hardening) in Aura.
 
-You are `worker_m2_1` (role: `teamwork_preview_worker`).
-Your assigned working directory is `/home/jeff/aura/.agents/teamwork/worker_m2_1/`.
+Your working directory is: /home/jeff/aura/.agents/teamwork/worker_m2_1
+Parent Orchestrator Conversation ID: 1732b97a-66c1-4a05-9f2b-afc669944583
 
-## Mandatory Reading:
-- User Request: `/home/jeff/aura/.agents/teamwork/ORIGINAL_REQUEST.md`
-- Master Baseline: `/home/jeff/aura/M0_M3_Audit_Report.md` (§ HOST-011, NET-007)
-- Scope: `/home/jeff/aura/.agents/teamwork/orchestrator_7/PROJECT.md`
-- Implementation Survey: `/home/jeff/aura/.agents/teamwork/explorer_impl_survey_2/handoff.md` (§ 1.1, 2.1, 3.1)
-- Repository Constitution: `/home/jeff/aura/AGENTS.md` (Strict zero mock/stub policy)
-- Domain Skills:
-  - `/home/jeff/aura/.agents/plugins/aura-dev-kit/skills/aura-host-domain/SKILL.md`
-  - `/home/jeff/aura/.agents/plugins/aura-dev-kit/skills/aura-net-domain/SKILL.md`
-
-## Milestone 2 Tasks:
-### 1. HOST-011: Declarative Component Registry TOML Manifest Loading
-Target File: `aura-core/src/runtime/registry.rs`
-- Remove the mock parsing logic (`if path.contains("test") { reg.tools.insert("mock_tool"...) }`).
-- Implement authentic Serde deserialization for declarative TOML tool manifests:
-  - Define `ToolManifestFile` with `tools: HashMap<String, ToolEntryConfig>`.
-  - Define `ToolEntryConfig` enum with `#[serde(tag = "substrate", rename_all = "lowercase")]`:
-    - `Wasm { path: PathBuf }`
-    - `Firecracker { kernel_path: String, rootfs_path: String, vcpu_count: Option<u32>, mem_size_mib: Option<u32> }` (with serde aliases `kernel`, `rootfs`).
-  - Update `KernelConfig` and `RuntimeBackend` with Serialize/Deserialize derives.
-  - Implement `Registry::load_from_config<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>>` reading file from disk.
-  - Implement `Registry::load_from_str(raw: &str) -> Result<Self, Box<dyn std::error::Error>>`.
-  - Implement `Registry::from_manifest(manifest: ToolManifestFile) -> Self`.
-  - Implement `Registry::validate_file_paths(&self) -> Result<(), RegistryError>`.
-  - Write unit tests in `registry.rs`:
-    - `test_registry_load_valid_toml`: Parses a valid TOML defining BOTH WASM and Firecracker tool backends, verifies resolution of tools.
-    - `test_registry_load_invalid_toml`: Asserts deserialization error on malformed TOML.
-    - `test_registry_validate_file_paths`: Verifies error propagation when referenced files do not exist.
-
-### 2. NET-007: Stateless July 2026 Model Context Protocol (MCP) Server Interface
-Target File: `aura-core/src/transport/mcp.rs` & `aura-core/src/transport/mod.rs`
-- Implement a stateless JSON-RPC 2.0 Model Context Protocol server interface:
-  - JSON-RPC 2.0 structures: `JsonRpcRequest`, `JsonRpcResponse`, `JsonRpcError`.
-  - Supported methods:
-    - `tools/list`: Enumerate registered tools from `Arc<Registry>`, returning tool names and schemas/substrates.
-    - `tools/call`: Handle tool execution requests (e.g. tool name, arguments), validate existence in `Registry`, and format standard MCP response.
-  - Standard JSON-RPC 2.0 error handling (-32700 Parse error, -32600 Invalid request, -32601 Method not found, -32602 Invalid params, -32603 Internal error).
-  - Export module in `aura-core/src/transport/mod.rs`.
-  - Integration/unit tests in `mcp.rs`:
-    - `test_mcp_tools_list_jsonrpc`: Verify `tools/list` returns registered tools in compliant JSON-RPC 2.0 format.
-    - `test_mcp_tools_call_success`: Verify `tools/call` for registered tool returns success.
-    - `test_mcp_method_not_found`: Verify -32601 returned for unknown methods.
-    - `test_mcp_invalid_jsonrpc`: Verify -32600 returned for malformed requests.
-
-### 3. Build & Test Verification:
-- Run `cargo check --all-targets`
-- Run `cargo test -p aura-core` (all tests must pass with 0 failures)
-- Ensure zero warnings, zero mocks, zero stubs in production code.
-
-Write complete results and test logs in `/home/jeff/aura/.agents/teamwork/worker_m2_1/handoff.md`.
-
-## Mandatory Integrity Warning:
+MANDATORY INTEGRITY WARNING:
 DO NOT CHEAT. All implementations must be genuine. DO NOT hardcode test results, create dummy/facade implementations, or circumvent the intended task. A teamwork_preview_auditor will independently verify your work. Integrity violations WILL be detected and your work WILL be rejected.
 
+MANDATORY: Read the authoritative user request first:
+/home/jeff/aura/.agents/teamwork/ORIGINAL_REQUEST.md
 
-## 2026-10-11T03:02:01Z
-[Message] timestamp=2026-10-11T03:02:01Z sender=b0e73c5b-179f-432b-9bbd-ebac6eea2996 priority=MESSAGE_PRIORITY_HIGH content=You are worker_m2_1 (role: teamwork_preview_worker).
-Your working directory is `/home/jeff/aura/.agents/teamwork/worker_m2_1/`.
-Read your task assignment in `/home/jeff/aura/.agents/teamwork/worker_m2_1/DISPATCH.md`.
+Also read:
+- /home/jeff/aura/PROJECT.md
+- /home/jeff/aura/.agents/teamwork/teamwork_preview_explorer_survey_2/survey_report.md
+- /home/jeff/aura/.agents/plugins/aura-dev-kit/skills/aura-host-domain/SKILL.md
+- /home/jeff/aura/.agents/plugins/aura-dev-kit/skills/aura-exe-vm-domain/SKILL.md
+- /home/jeff/aura/.agents/plugins/aura-dev-kit/skills/aura-tool-domain/SKILL.md
+
+File Write Ownership (Exclusive):
+- deploy/images/vsock-screenshot-daemon/Cargo.toml
+- deploy/images/vsock-screenshot-daemon/src/capture.rs
+- deploy/images/vsock-screenshot-daemon/src/input.rs
+- deploy/images/vsock-screenshot-daemon/src/server.rs
+- deploy/images/vsock-screenshot-daemon/src/main.rs
+- deploy/images/vsock-screenshot-daemon/src/lib.rs (if needed)
+- deploy/images/vsock-screenshot-daemon/tests/
+- aura-core/src/hypervisor/firecracker.rs (only for port 5254 constant harmonization)
+- aura-sdk/aura_sdk/tools/computer.py
+- aura-sdk/tests/test_computer_tool.py
+
+Tasks:
+1. `deploy/images/vsock-screenshot-daemon`:
+   - In `Cargo.toml`: Add dependencies `serde = { version = "1.0", features = ["derive"] }`, `serde_json = "1.0"`, `base64 = "0.22"`.
+   - In `src/capture.rs`: Fix `plane_mask` calculation on line 81:
+     `let plane_mask = if screen.root_depth < 32 { (1u32 << screen.root_depth) - 1 } else { !0 };`
+     Prevent `BadMatch` X11 protocol error on 24-bit root windows.
+   - In `src/input.rs`: Implement X11 synthetic input actions (`click`, `move`, `drag`, `type`, `key`). Handle cases where X11 display may not be reachable during unit testing gracefully.
+   - In `src/server.rs`: Implement persistent JSON-RPC 2.0 request loop parsing line-delimited JSON. Support methods:
+     * `click` (x, y, button, clicks)
+     * `move` (x, y)
+     * `drag` (start_x, start_y, end_x, end_y, button)
+     * `type` (text)
+     * `key` (key, action)
+     * `screenshot` (format: "png") -> captures frame, encodes base64, returns in JSON-RPC result.
+     Preserve legacy one-shot raw PNG capture fallback for clients expecting raw binary stream.
+   - Add unit tests in `deploy/images/vsock-screenshot-daemon/tests/` or in module tests verifying JSON-RPC parsing, dispatching, and response serialization.
+
+2. `aura-core/src/hypervisor/firecracker.rs`:
+   - Harmonize default port constant: `pub const DEFAULT_SCREENSHOT_VSOCK_PORT: u32 = 5254;`.
+
+3. `aura-sdk/aura_sdk/tools/computer.py`:
+   - Implement zero-dependency pure Python PNG scanline visual redaction function:
+     `mask_image_bytes(png_bytes: bytes, bounding_boxes: list[dict[str, Any] | tuple[int, int, int, int]]) -> bytes`.
+     Must parse PNG chunks (`IHDR`, `IDAT`, `IEND`), uncompress scanlines via `zlib`, black out sensitive pixels `(x, y, w, h)`, re-compress scanlines, update chunk CRC32, and return valid PNG bytes.
+   - Implement asynchronous `ComputerTool`:
+     Methods:
+     * `click(self, x: int, y: int, button: int = 1, clicks: int = 1) -> dict[str, Any]`
+     * `move(self, x: int, y: int) -> dict[str, Any]`
+     * `drag(self, start_x: int, start_y: int, end_x: int, end_y: int, button: int = 1) -> dict[str, Any]`
+     * `type(self, text: str) -> dict[str, Any]`
+     * `key(self, key: str, action: str = "press") -> dict[str, Any]`
+     * `screenshot(self, redaction_boxes: list[Any] | None = None) -> bytes`
+     * `capture_redacted_screenshot(self, bounding_boxes: list[Any] | None = None, save_path: str | Path | None = None) -> bytes`
+     * `close(self) -> None`
+
+4. `aura-sdk/tests/test_computer_tool.py`:
+   - Comprehensive test suite testing all input methods, mock daemon communication, JSON-RPC parsing, and PNG scanline visual redaction (verifying blacked out pixels, unaffected surrounding pixels, valid PNG headers and CRC).
+
+5. Verification Commands:
+   - `cargo test --manifest-path deploy/images/vsock-screenshot-daemon/Cargo.toml`
+   - `cargo test -p aura-core --jobs 1`
+   - `cargo test -p aura-core --test m5_e2e_opaque_test`
+   - `/home/jeff/aura/aura-sdk/.venv/bin/pytest aura-sdk/tests`
+   - `/home/jeff/aura/aura-sdk/.venv/bin/ruff check aura-sdk/aura_sdk aura-sdk/tests`
+
+6. Output:
+   - Update `progress.md` in your working directory.
+   - Write a complete `handoff.md` in your working directory detailing changes made, test commands and passing outputs, and layout compliance.
+   - Send completion message to parent with report path.

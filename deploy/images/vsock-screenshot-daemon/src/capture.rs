@@ -77,8 +77,10 @@ pub fn capture_screen(display_name: Option<&str>) -> Result<Vec<u8>, CaptureErro
         ));
     }
 
+    let plane_mask = compute_plane_mask(screen.root_depth as u32);
+
     let img = conn
-        .get_image(ImageFormat::Z_PIXMAP, root, 0, 0, width, height, !0)
+        .get_image(ImageFormat::Z_PIXMAP, root, 0, 0, width, height, plane_mask)
         .map_err(|e| CaptureError::X11Protocol(format!("Failed to get image: {}", e)))?
         .reply()
         .map_err(|e| CaptureError::X11Protocol(format!("Reply error for image: {}", e)))?;
@@ -153,6 +155,16 @@ pub fn encode_png(width: u32, height: u32, rgba_data: &[u8]) -> Result<Vec<u8>, 
     Ok(png_bytes)
 }
 
+/// Computes the correct X11 plane_mask for a given root window depth.
+/// Prevents BadMatch X11 protocol error on 24-bit (or <32 bit) root windows.
+pub fn compute_plane_mask(depth: u32) -> u32 {
+    if depth < 32 {
+        (1u32 << depth) - 1
+    } else {
+        !0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,5 +183,16 @@ mod tests {
         let png_bytes = png_res.unwrap();
         // Check PNG signature: 89 50 4E 47 0D 0A 1A 0A
         assert_eq!(&png_bytes[0..8], &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+    }
+
+    #[test]
+    fn test_compute_plane_mask_various_depths() {
+        assert_eq!(compute_plane_mask(1), 0x0000_0001);
+        assert_eq!(compute_plane_mask(8), 0x0000_00FF);
+        assert_eq!(compute_plane_mask(16), 0x0000_FFFF);
+        assert_eq!(compute_plane_mask(24), 0x00FF_FFFF);
+        assert_eq!(compute_plane_mask(30), 0x3FFF_FFFF);
+        assert_eq!(compute_plane_mask(32), 0xFFFF_FFFF);
+        assert_eq!(compute_plane_mask(36), 0xFFFF_FFFF);
     }
 }

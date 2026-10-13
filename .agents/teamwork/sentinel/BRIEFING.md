@@ -1,7 +1,7 @@
-# BRIEFING — 2026-10-11T13:27:00Z
+# BRIEFING — 2026-10-11T14:44:30Z
 
 ## Mission
-Coordinate implementation and delivery of the 11 partially implemented requirements from M0-M3 Audit Report for the Aura Multi-Agent Orchestration Operating System, via project orchestrator, and verify completion via independent victory auditor.
+Coordinate implementation and delivery of Phase M5 (Hardening) for the Aura Multi-Agent Orchestration Operating System, via project orchestrator, and verify completion via independent victory auditor.
 
 ## 🔒 My Identity
 - Archetype: sentinel
@@ -16,6 +16,9 @@ Coordinate implementation and delivery of the 11 partially implemented requireme
 - Active Orchestrator 8: ad091f9f-df8d-4332-bf82-a7111f5328d2
 - Active Orchestrator 9: 801dc836-0e0c-494b-8262-6981eb7e1ef0
 - Active Victory Auditor: 1fde3fbb-5542-469b-8537-51586fbff01d
+- Active Orchestrator 10: dae2eddf-f903-4d1f-b5f4-42a3e7019103 (handed off to successor)
+- Active Orchestrator 11 (Direct): 1732b97a-66c1-4a05-9f2b-afc669944583 (handed off to successor)
+- Active Orchestrator 12 (Direct): aede94a9-0e62-4bbd-a37a-72a2e3c4d3ae
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
@@ -25,46 +28,29 @@ Coordinate implementation and delivery of the 11 partially implemented requireme
 ## Routing Decision
 - Route: General
 - Agent: teamwork_preview_orchestrator
-- Rationale: The task is a multi-part production implementation of 11 gap requirements across Rust microkernel concurrency, HTTP/3 QUIC load tests, TOML registry, MCP endpoints, Firecracker microVM sandboxing, and vsock stateful tools.
+- Rationale: Phase M5 (Hardening) requires broad software engineering orchestration across Ephemeral-Tunnel isolation, sandboxed GUI Firecracker automation, microkernel zero-trust security & AES-256 storage encryption, and SPIRE federation & transport fallback resilience.
 
 ## User Context
-- **Last user request**: "Pickup right where Orchestrator 8 left off. Milestones 1, 2, 3 have been completed and verified (PASS in GATE_STATUS.md). Milestone 4 (Persistent Stateful Tools & GAP-003) Iteration 1 failed due to defects identified by challengers and auditor. Iteration 2 fix exploration was conducted by explorer_m4_fix_1, explorer_m4_fix_2, and explorer_m4_fix_3... Next Steps: 1. Apply fixes to bash.py, browser.py, test_browser_tool_stress.py, and firecracker.rs. 2. Verify with pytest aura-sdk/tests (84/84 passing) and cargo test -p aura-core. 3. Complete Gate 4 Iteration 2 verification. 4. Execute Milestone 5 final workspace verification and deliver completion report."
+- **Last user request**: Milestone 3 implementation finished; resume post-server-restart, evaluate Gate 3, mark M3 complete, and advance to Milestone 4 (SPIRE Identity Federation & Transport Fallback) and final workspace verification.
 - **Pending clarifications**: none
-- **Delivered results**:
-  - Milestone 1 PASSED: Tokio runtime pool, RuntimeMetrics, 5k concurrent QUIC stream load test (`http3_stream_concurrency_test.rs`).
-  - Milestone 2 PASSED: Declarative TOML manifest loading for Component Registry (`HOST-011`), stateless MCP HTTP/3 endpoint (`NET-007`).
-  - Milestone 3 PASSED: Authentic Zenoh task dispatch with dynamic SVID (`BUS-003`), `/dev/kvm` validation (`EXE-VM-002`), immutable rootfs layering (`EXE-VM-011`).
-  - Milestone 4 PASSED: Persistent bash session state (`TOOL-BASH-002`), headless browser CDP client and forwarder (`TOOL-BRW-003`), WASI 0.3 static WIT mitigation documentation (`GAP-003`).
-  - Milestone 5 PASSED: Workspace verification across all 274 tests with 100% pass rate.
-  - Independent Post-Victory Audit: VICTORY CONFIRMED by `auditor_sentinel_victory`.
+- **Delivered results**: Milestones 1 & 2 complete and verified; Milestone 3 implemented and verified by worker_m3_1.
 
 ## Project Status
-- **Phase**: complete
-- **Active Orchestrator Dir**: /home/jeff/aura/.agents/teamwork/orchestrator_9/
-- **Active Orchestrator ID**: 801dc836-0e0c-494b-8262-6981eb7e1ef0
-- **Active Victory Auditor Dir**: /home/jeff/aura/.agents/teamwork/auditor_sentinel_victory/
-- **Active Victory Auditor ID**: 1fde3fbb-5542-469b-8537-51586fbff01d
-- **Cron 1 (Reporting)**: cancelled (completed)
-- **Cron 2 (Liveness)**: cancelled (completed)
+- **Phase**: in progress
+- **Active Orchestrator Dir**: /home/jeff/aura/.agents/teamwork/orchestrator_12/
+- **Active Orchestrator ID**: aede94a9-0e62-4bbd-a37a-72a2e3c4d3ae
+- **Active Victory Auditor Dir**: [to be spawned on victory claim]
+- **Active Victory Auditor ID**: [to be spawned on victory claim]
+- **Cron 1 (Reporting)**: task-1125 (`*/8 * * * *`)
+- **Cron 2 (Liveness)**: task-1127 (`*/10 * * * *`)
 
 ## Victory Audit Status
-- **Triggered**: yes
-- **Verdict**: VICTORY CONFIRMED
+- **Triggered**: no
+- **Verdict**: pending
 - **Retry count**: 0
 
 ## Artifact Index
 - /home/jeff/aura/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative user requests
 - /home/jeff/aura/.agents/teamwork/sentinel/BRIEFING.md — Sentinel persistent memory
 - /home/jeff/aura/.agents/teamwork/sentinel/handoff.md — Sentinel handoff report
-- /home/jeff/aura/.agents/teamwork/orchestrator_9/handoff.md — Orchestrator 9 completion report
-- /home/jeff/aura/.agents/teamwork/orchestrator_9/GATE_STATUS.md — Gate verdicts (M1-M5: ALL PASS)
-- /home/jeff/aura/.agents/teamwork/auditor_sentinel_victory/handoff.md — Victory Auditor report (VICTORY CONFIRMED)
-- /home/jeff/aura/aura-core/tests/http3_stream_concurrency_test.rs — Empirical QUIC 5k stream load test
-- /home/jeff/aura/aura-core/src/runtime/registry.rs — Declarative TOML manifest loader
-- /home/jeff/aura/aura-core/src/transport/mcp.rs — Stateless JSON-RPC 2.0 MCP server
-- /home/jeff/aura/aura-core/src/hypervisor/firecracker.rs — KVM validation, rootfs immutability & session locks
-- /home/jeff/aura/aura-core/src/bus/mod.rs — Authentic Zenoh task dispatch & dynamic SVID
-- /home/jeff/aura/aura-sdk/aura_sdk/tools/bash.py — Stateful sandboxed bash tool
-- /home/jeff/aura/aura-sdk/aura_sdk/tools/browser.py — Async CDP client & headless browser tool
-- /home/jeff/aura/deploy/images/vsock-shell-daemon/ — In-guest persistent shell daemon
-- /home/jeff/aura/tools/ast-blast-radius/ — AST Blast Radius recursive CTE tool
+- /home/jeff/aura/.agents/teamwork/orchestrator_10/ — Phase M5 Orchestrator workspace

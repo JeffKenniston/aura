@@ -1,50 +1,68 @@
-# BRIEFING — 2026-10-11T03:03:00Z
+# BRIEFING — 2026-10-11T18:10:45Z
 
 ## Mission
-Forensic integrity audit of Milestone 1 (Runtime & Concurrency) implementation.
+Forensic integrity audit of Milestone 1 changes across `tools/ephemeral-tunnel`, `aura-core/src/knowledge/git.rs`, and `aura-core/src/hypervisor/firecracker.rs`.
 
 ## 🔒 My Identity
 - Archetype: forensic_auditor
 - Roles: critic, specialist, auditor
-- Working directory: /home/jeff/aura/.agents/teamwork/auditor_m1_1/
-- Original parent: b0e73c5b-179f-432b-9bbd-ebac6eea2996
-- Target: Milestone 1 (Runtime & Concurrency)
+- Working directory: /home/jeff/aura/.agents/teamwork/auditor_m1_1
+- Original parent: dae2eddf-f903-4d1f-b5f4-42a3e7019103
+- Target: Milestone 1 (Ephemeral Credential Lifecycle & VCS Integration)
 
 ## 🔒 Key Constraints
 - Audit-only — do NOT modify implementation code
 - Trust NOTHING — verify everything independently
-- Strict zero mock/stub policy (AGENTS.md)
-- Integrity mode: demo (ORIGINAL_REQUEST.md)
-- Check all M1 files for authentic implementation: no fake responses, no facade logic, no hardcoded values
+- Integrity Mode: Demo Mode (as specified in ORIGINAL_REQUEST.md)
+- ABSOLUTELY NO mocks, stubs, fake tokens, hardcoded expected outputs, skipped security checks, or TODOs in implementation paths
+- Confirm authentic credentials redaction (`[REDACTED-TOKEN-...]`), RAII drop guard revocation, and out-of-band injection into `current_env` for both microVM and host fallback
+- Deliver explicit CLEAN or INTEGRITY VIOLATION verdict in handoff.md and send_message to parent
 
 ## Current Parent
-- Conversation ID: b0e73c5b-179f-432b-9bbd-ebac6eea2996
-- Updated: 2026-10-11T03:03:00Z
+- Conversation ID: dae2eddf-f903-4d1f-b5f4-42a3e7019103
+- Updated: not yet
 
 ## Audit Scope
-- **Work product**: Milestone 1 files (`.cargo/config.toml`, `aura-core/src/config/mod.rs`, `aura-core/src/runtime/mod.rs`, `aura-core/src/lib.rs`, `aura-cli/src/main.rs`, `aura-core/src/transport/http3.rs`, `aura-core/tests/http3_stream_concurrency_test.rs`)
+- **Work product**: `tools/ephemeral-tunnel`, `aura-core/src/knowledge/git.rs`, `aura-core/src/hypervisor/firecracker.rs` (and associated tests)
 - **Profile loaded**: General Project (Demo Mode)
 - **Audit type**: forensic integrity check
 
 ## Audit Progress
-- **Phase**: investigating
-- **Checks completed**: [DISPATCH recorded, BRIEFING initialized]
-- **Checks remaining**: [Source code inspection for mocks/stubs/TODOs/facades, Empirical test execution (`cargo test -p aura-core --lib`, `cargo test -p aura-core --test http3_stream_concurrency_test`), Concurrency & metrics verification, Handoff report generation]
-- **Findings so far**: CLEAN (investigation ongoing)
-
-## Key Decisions Made
-- Prioritize independent verification of tests and rigorous search for stubs/mocks/TODOs across all M1 files.
-
-## Artifact Index
-- `/home/jeff/aura/.agents/teamwork/auditor_m1_1/DISPATCH.md` — Task assignment log
-- `/home/jeff/aura/.agents/teamwork/auditor_m1_1/skills/aura-host-domain.md` — Local copy of domain skill
+- **Phase**: reporting
+- **Checks completed**:
+  - Phase 1: Source Code Analysis (Mocks/stubs/TODOs/fake tokens/hardcoded results/facade detection) - CLEAN
+  - Phase 2: Credential Redaction Deep-Dive (`credentials.rs`, `firecracker.rs`) - CLEAN
+  - Phase 3: RAII Revocation Drop Guard Deep-Dive (`git.rs`) - CLEAN
+  - Phase 4: Out-of-Band Sandbox Injection Deep-Dive (`firecracker.rs`) - CLEAN
+  - Phase 5: Behavioral Verification & Independent Test Execution (`cargo test`) - 100% PASS (15 ephemeral-tunnel, 325 aura-core, 84 aura-sdk)
+  - Phase 6: Adversarial Stress-Testing & Attack Surface Analysis - COMPLETE
+- **Checks remaining**: []
+- **Findings so far**: CLEAN — No integrity violations found. Production-grade implementation verified.
 
 ## Attack Surface
-- **Hypotheses tested**: None yet
-- **Vulnerabilities found**: None yet
-- **Untested angles**: Runtime worker thread saturation, blocking task isolation, QUIC stream multiplexing reality vs simulation
+- **Hypotheses tested**:
+  - Test result hardcoding: negative (all dynamic assertions and real UUIDs/hashes)
+  - Facade/dummy stubs: negative (all full implementations)
+  - Credential redaction leakage: negative (Credentials Display/Debug properly redact)
+  - RAII drop guard bypass on error/panic: negative (Drop implementation and mutex poisoning recovery verified)
+  - Out-of-band injection fallback: negative (both vsock and host subshell dual-mode verified)
+- **Vulnerabilities found**:
+  - Minor edge case: `format_redacted_handle` in `firecracker.rs` uses byte slicing (`[raw_token.len() - 8..]`) instead of unicode char slicing (`chars().collect()`), safe for standard ASCII UUIDs/tokens but could panic on non-ASCII multi-byte tokens.
+- **Untested angles**: none within M1 scope
 
 ## Loaded Skills
-- **Source**: /home/jeff/aura/.agents/plugins/aura-dev-kit/skills/aura-host-domain/SKILL.md
-- **Local copy**: /home/jeff/aura/.agents/teamwork/auditor_m1_1/skills/aura-host-domain.md
-- **Core methodology**: Tokio async runtime rules, no blocking syscalls on worker threads, 5,000+ concurrent HTTP/3 streams without starvation
+- **Source**: `/home/jeff/aura/.agents/plugins/aura-dev-kit/skills/aura-architecture/SKILL.md`
+- **Core methodology**: Microkernel sandboxes, zero-trust SPIFFE identity, vsock execution
+- **Source**: `/home/jeff/aura/.agents/plugins/aura-dev-kit/skills/aura-iam-domain/SKILL.md`
+- **Core methodology**: IAM, SPIFFE SVID non-escalation, ephemeral credentials
+- **Source**: `/home/jeff/aura/.agents/plugins/aura-dev-kit/skills/aura-host-domain/SKILL.md`
+- **Core methodology**: Execution Host and Firecracker microVM runtime
+
+## Key Decisions Made
+- Confirmed verdict: CLEAN. Full empirical evidence documented.
+
+## Artifact Index
+- `/home/jeff/aura/.agents/teamwork/auditor_m1_1/DISPATCH.md` — Initial dispatch message
+- `/home/jeff/aura/.agents/teamwork/auditor_m1_1/BRIEFING.md` — Situational awareness
+- `/home/jeff/aura/.agents/teamwork/auditor_m1_1/progress.md` — Execution heartbeat
+- `/home/jeff/aura/.agents/teamwork/auditor_m1_1/handoff.md` — Final audit report

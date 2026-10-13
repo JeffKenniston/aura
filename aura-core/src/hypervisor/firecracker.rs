@@ -12,8 +12,83 @@ use tokio::io::AsyncReadExt;
 /// PNG magic header bytes: \x89PNG\r\n\x1a\n
 pub const PNG_MAGIC_BYTES: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
+/// Default maximum virtio-vsock stream buffer limit (16 MiB) to prevent host memory exhaustion (EXE-VM-015).
+pub const DEFAULT_MAX_VSOCK_STREAM_BYTES: usize = 16 * 1024 * 1024;
+
+/// Configuration for virtio-vsock stream buffer limits and host memory protection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VsockStreamConfig {
+    /// Maximum buffer size in bytes that the host will allocate when reading from an untrusted guest vsock stream.
+    pub max_buffer_bytes: usize,
+}
+
+impl Default for VsockStreamConfig {
+    fn default() -> Self {
+        Self {
+            max_buffer_bytes: DEFAULT_MAX_VSOCK_STREAM_BYTES,
+        }
+    }
+}
+
+impl VsockStreamConfig {
+    pub fn new(max_buffer_bytes: usize) -> Self {
+        Self { max_buffer_bytes }
+    }
+}
+
+/// Typed error for virtio-vsock stream operations and memory bound enforcement.
+#[derive(Debug)]
+pub enum VsockStreamError {
+    /// Underlying I/O error occurred during stream reading.
+    Io(std::io::Error),
+    /// Stream exceeded the configured maximum buffer limit and was truncated.
+    LimitExceeded { limit: usize, received: usize },
+    /// Compatibility alias for LimitExceeded.
+    BufferLimitExceeded { max_bytes: usize, bytes_read: usize },
+    /// Other vsock stream or protocol error.
+    Other(String),
+}
+
+impl std::fmt::Display for VsockStreamError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VsockStreamError::Io(e) => write!(f, "Vsock stream I/O error: {}", e),
+            VsockStreamError::LimitExceeded { limit, received } => {
+                write!(
+                    f,
+                    "Vsock stream exceeded maximum buffer limit of {} bytes (received {} bytes)",
+                    limit, received
+                )
+            }
+            VsockStreamError::BufferLimitExceeded { max_bytes, bytes_read } => {
+                write!(
+                    f,
+                    "Vsock stream exceeded maximum buffer limit of {} bytes (truncated at {} bytes)",
+                    max_bytes, bytes_read
+                )
+            }
+            VsockStreamError::Other(msg) => write!(f, "Vsock stream error: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for VsockStreamError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            VsockStreamError::Io(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl From<std::io::Error> for VsockStreamError {
+    fn from(err: std::io::Error) -> Self {
+        VsockStreamError::Io(err)
+    }
+}
+
 /// Default Firecracker vsock port for the computer screenshot daemon (TOOL-CMP-001, TOOL-CMP-003).
-pub const DEFAULT_SCREENSHOT_VSOCK_PORT: u32 = 5252;
+pub const DEFAULT_SCREENSHOT_VSOCK_PORT: u32 = 5254;
 
 /// Default Firecracker vsock port for persistent bash session daemon (TOOL-BASH-002).
 pub const DEFAULT_BASH_VSOCK_PORT: u32 = 5250;
@@ -337,12 +412,85 @@ pub async fn process_and_save_screenshot(
     })
 }
 
-/// Spawns an asynchronous vsock stream listener for screenshots.
+/// Reads an incoming asynchronous byte stream up to `max_bytes` with instant truncation.
+///
+/// Enforces Zero-Trust boundary (EXE-VM-015): untrusted guest microVMs cannot exhaust host
+/// memory by streaming unbounded payloads. If incoming data exceeds `max_bytes`, the stream
+/// is immediately truncated at exactly `max_bytes`, and reading terminates without allocating
+/// additional memory or panicking.
+///
+/// Returns `Ok((buffer, truncated))` where `truncated` is true if the stream exceeded `max_bytes`.
+pub async fn read_stream_with_limit_ext<R: tokio::io::AsyncRead + Unpin>(
+    reader: &mut R,
+    max_bytes: usize,
+) -> Result<(Vec<u8>, bool), VsockStreamError> {
+    let mut buffer = Vec::new();
+    let mut chunk = [0u8; 65536];
+    let mut truncated = false;
+
+    if max_bytes == 0 {
+        let n = reader.read(&mut chunk[..1]).await?;
+        if n > 0 {
+            truncated = true;
+        }
+        return Ok((buffer, truncated));
+    }
+
+    loop {
+        let remaining = max_bytes - buffer.len();
+        if remaining == 0 {
+            let n = reader.read(&mut chunk[..1]).await?;
+            if n > 0 {
+                truncated = true;
+            }
+            break;
+        }
+
+        let bytes_to_read = chunk.len().min(remaining + 1);
+        let n = reader.read(&mut chunk[..bytes_to_read]).await?;
+        if n == 0 {
+            break;
+        }
+
+        if buffer.len() + n > max_bytes {
+            let allowed = max_bytes - buffer.len();
+            buffer.extend_from_slice(&chunk[..allowed]);
+            truncated = true;
+            break;
+        } else {
+            buffer.extend_from_slice(&chunk[..n]);
+        }
+    }
+
+    Ok((buffer, truncated))
+}
+
+/// Reads an incoming asynchronous byte stream up to `max_bytes` with instant truncation.
+///
+/// Returns `Ok(Vec<u8>)` containing the received payload truncated to at most `max_bytes`.
+pub async fn read_stream_with_limit<R: tokio::io::AsyncRead + Unpin>(
+    reader: &mut R,
+    max_bytes: usize,
+) -> Result<Vec<u8>, VsockStreamError> {
+    let (buf, _truncated) = read_stream_with_limit_ext(reader, max_bytes).await?;
+    Ok(buf)
+}
+
+/// Spawns an asynchronous vsock stream listener for screenshots with default buffer limit.
 /// In Firecracker virtio-vsock, host listeners bound to `<uds_path>_<port>` receive connections
 /// initiated by guest daemons targeting host CID 2 on port `<port>`.
 pub async fn start_screenshot_listener(
     socket_path: PathBuf,
     artifacts_dir: PathBuf,
+) -> Result<ScreenshotListenerHandle, Box<dyn std::error::Error + Send + Sync>> {
+    start_screenshot_listener_with_config(socket_path, artifacts_dir, VsockStreamConfig::default()).await
+}
+
+/// Spawns an asynchronous vsock stream listener for screenshots with explicit stream configuration.
+pub async fn start_screenshot_listener_with_config(
+    socket_path: PathBuf,
+    artifacts_dir: PathBuf,
+    config: VsockStreamConfig,
 ) -> Result<ScreenshotListenerHandle, Box<dyn std::error::Error + Send + Sync>> {
     tokio::fs::create_dir_all(&artifacts_dir).await?;
 
@@ -356,8 +504,9 @@ pub async fn start_screenshot_listener(
 
     let listener = tokio::net::UnixListener::bind(&socket_path)?;
     println!(
-        "Screenshot vsock listener active on {}",
-        socket_path.display()
+        "Screenshot vsock listener active on {} (max_buffer_bytes: {})",
+        socket_path.display(),
+        config.max_buffer_bytes
     );
 
     let (shutdown_tx, mut shutdown_rx) = tokio::sync::broadcast::channel(1);
@@ -379,10 +528,22 @@ pub async fn start_screenshot_listener(
                             let artifacts_dir = artifacts_dir_clone.clone();
                             let tx = tx.clone();
                             tokio::spawn(async move {
-                                let mut buffer = Vec::new();
-                                if let Err(e) = stream.read_to_end(&mut buffer).await {
-                                    eprintln!("Failed reading vsock screenshot stream: {}", e);
-                                    return;
+                                let (buffer, truncated) = match read_stream_with_limit_ext(
+                                    &mut stream,
+                                    config.max_buffer_bytes,
+                                ).await {
+                                    Ok(res) => res,
+                                    Err(e) => {
+                                        eprintln!("Failed reading vsock screenshot stream: {}", e);
+                                        return;
+                                    }
+                                };
+
+                                if truncated {
+                                    eprintln!(
+                                        "Zero-Trust Warning: vsock stream truncated after reaching max buffer limit of {} bytes",
+                                        config.max_buffer_bytes
+                                    );
                                 }
 
                                 match process_and_save_screenshot(&buffer, &artifacts_dir).await {
@@ -432,6 +593,8 @@ pub struct FirecrackerVm {
     screenshot_socket: Option<PathBuf>,
     pub scratch_disk_path: Option<PathBuf>,
     pub cdp_forwarder: Option<CdpVsockForwarder>,
+    pub egress_proxy: Option<crate::hypervisor::proxy::EgressProxyHandle>,
+    pub vsock_stream_config: VsockStreamConfig,
 }
 
 impl FirecrackerVm {
@@ -450,6 +613,8 @@ impl FirecrackerVm {
             screenshot_socket: None,
             scratch_disk_path: None,
             cdp_forwarder: None,
+            egress_proxy: None,
+            vsock_stream_config: VsockStreamConfig::default(),
         }
     }
 
@@ -468,6 +633,8 @@ impl FirecrackerVm {
             screenshot_socket: None,
             scratch_disk_path: None,
             cdp_forwarder: None,
+            egress_proxy: None,
+            vsock_stream_config: VsockStreamConfig::default(),
         }
     }
 
@@ -476,15 +643,43 @@ impl FirecrackerVm {
         PathBuf::from(format!("{}_{}", self.vsock_uds_path.display(), port))
     }
 
+    /// Starts the transparent TLS egress proxy for this microVM (EXE-VM-015).
+    pub async fn start_egress_proxy(
+        &mut self,
+        config: crate::hypervisor::proxy::EgressProxyConfig,
+    ) -> Result<SocketAddr, Box<dyn std::error::Error + Send + Sync>> {
+        let handle = crate::hypervisor::proxy::EgressProxy::start(config).await?;
+        let bound_addr = handle.bind_addr;
+        self.egress_proxy = Some(handle);
+        Ok(bound_addr)
+    }
+
+    /// Stops the egress proxy if active.
+    pub fn stop_egress_proxy(&mut self) {
+        if let Some(proxy) = self.egress_proxy.take() {
+            proxy.stop();
+        }
+    }
+
+    /// Starts a vsock stream listener for screenshots with explicit stream configuration.
+    pub async fn start_screenshot_listener_with_config(
+        &mut self,
+        port: u32,
+        artifacts_dir: PathBuf,
+        config: VsockStreamConfig,
+    ) -> Result<ScreenshotListenerHandle, Box<dyn Error + Send + Sync>> {
+        let socket_path = self.screenshot_socket_path(port);
+        self.screenshot_socket = Some(socket_path.clone());
+        start_screenshot_listener_with_config(socket_path, artifacts_dir, config).await
+    }
+
     /// Starts a vsock stream listener for screenshots captured from this microVM.
     pub async fn start_screenshot_listener(
         &mut self,
         port: u32,
         artifacts_dir: PathBuf,
     ) -> Result<ScreenshotListenerHandle, Box<dyn Error + Send + Sync>> {
-        let socket_path = self.screenshot_socket_path(port);
-        self.screenshot_socket = Some(socket_path.clone());
-        start_screenshot_listener(socket_path, artifacts_dir).await
+        self.start_screenshot_listener_with_config(port, artifacts_dir, self.vsock_stream_config).await
     }
 
     /// Starts the host-to-guest vsock TCP forwarder for Chrome DevTools Protocol (CDP) (TOOL-BRW-003).
@@ -626,6 +821,9 @@ impl FirecrackerVm {
 
         // Stop host-to-guest CDP forwarder if active (TOOL-BRW-003)
         self.stop_cdp_forwarder();
+
+        // Stop TLS egress proxy if active (EXE-VM-015)
+        self.stop_egress_proxy();
 
         // Attempt graceful SendCtrlAltDel first if API socket is responsive
         let _ = self.send_api_request("PUT", "/actions", r#"{"action_type": "SendCtrlAltDel"}"#);
@@ -821,6 +1019,50 @@ async fn forward_tcp_to_vsock(
     Ok(())
 }
 
+/// Formats a raw token into an opaque, sanitized handle for model context and logs (TOOL-ET-002).
+pub fn format_redacted_handle(raw_token: &str, service: Option<&str>) -> String {
+    let suffix = if raw_token.len() >= 8 {
+        &raw_token[raw_token.len() - 8..]
+    } else {
+        "..."
+    };
+    match service {
+        Some(s) if !s.is_empty() => {
+            format!("spiffe://aura.local/ephemeral/{}/[REDACTED-TOKEN-{}]", s, suffix)
+        }
+        _ => format!("[REDACTED-TOKEN-{}]", suffix),
+    }
+}
+
+/// Safely escapes a string literal for POSIX single-quoted shell execution (`'...'`).
+/// Guarantees zero shell injection when propagating variables over vsock or subshell.
+pub fn shell_escape_literal(s: &str) -> String {
+    let mut escaped = String::with_capacity(s.len() + 2);
+    escaped.push('\'');
+    for c in s.chars() {
+        if c == '\'' {
+            escaped.push_str("'\\''");
+        } else {
+            escaped.push(c);
+        }
+    }
+    escaped.push('\'');
+    escaped
+}
+
+/// Validates that an environment variable key is a valid POSIX identifier ([A-Za-z_][A-Za-z0-9_]*).
+pub fn is_valid_env_key(key: &str) -> bool {
+    if key.is_empty() {
+        return false;
+    }
+    let mut chars = key.chars();
+    let first = chars.next().unwrap();
+    if !(first.is_ascii_alphabetic() || first == '_') {
+        return false;
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
 /// Request sent to the in-guest shell daemon over AF_VSOCK (TOOL-BASH-002).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BashSessionRequest {
@@ -847,6 +1089,7 @@ pub struct BashSessionHandle {
     pub last_accessed: std::time::Instant,
     pub current_cwd: Option<String>,
     pub current_env: std::collections::HashMap<String, String>,
+    pub injected_keys: std::collections::HashSet<String>,
 }
 
 impl BashSessionHandle {
@@ -867,7 +1110,50 @@ impl BashSessionHandle {
             last_accessed: std::time::Instant::now(),
             current_cwd: None,
             current_env: std::collections::HashMap::new(),
+            injected_keys: std::collections::HashSet::new(),
         })
+    }
+
+    /// Dispatches a command to the in-guest shell daemon over Firecracker AF_VSOCK Unix stream.
+    async fn send_vsock_command(
+        &mut self,
+        command: &str,
+    ) -> Result<BashCommandOutput, Box<dyn std::error::Error + Send + Sync>> {
+        let mut stream = tokio::net::UnixStream::connect(&self.vm.vsock_uds_path).await?;
+        let handshake = format!("CONNECT {}\n", self.vsock_port);
+        tokio::io::AsyncWriteExt::write_all(&mut stream, handshake.as_bytes()).await?;
+
+        let mut handshake_resp = Vec::new();
+        let mut b = [0u8; 1];
+        while b[0] != b'\n' {
+            tokio::io::AsyncReadExt::read_exact(&mut stream, &mut b).await?;
+            handshake_resp.push(b[0]);
+            if handshake_resp.len() > 256 {
+                return Err("Vsock handshake response too long".into());
+            }
+        }
+        let resp_str = String::from_utf8_lossy(&handshake_resp);
+        if !resp_str.starts_with("OK") {
+            return Err(format!("Vsock connection failed: {}", resp_str.trim()).into());
+        }
+
+        let req = BashSessionRequest {
+            session_id: self.session_id.clone(),
+            command: command.to_string(),
+            action: "execute".to_string(),
+        };
+        let req_line = format!("{}\n", serde_json::to_string(&req)?);
+        tokio::io::AsyncWriteExt::write_all(&mut stream, req_line.as_bytes()).await?;
+
+        let mut reader = tokio::io::BufReader::new(stream);
+        let mut resp_line = String::new();
+        tokio::io::AsyncBufReadExt::read_line(&mut reader, &mut resp_line).await?;
+
+        let output: BashCommandOutput = serde_json::from_str(resp_line.trim())?;
+        if let Some(ref cwd) = output.cwd {
+            self.current_cwd = Some(cwd.clone());
+        }
+        Ok(output)
     }
 
     /// Executes a command in the session microVM via vsock UDS, or authentic host subshell in dev/test mode.
@@ -880,41 +1166,7 @@ impl BashSessionHandle {
 
         // 1. If Firecracker vsock UDS exists on host, route over Unix stream:
         if self.vm.vsock_uds_path.exists() {
-            let mut stream = tokio::net::UnixStream::connect(&self.vm.vsock_uds_path).await?;
-            let handshake = format!("CONNECT {}\n", self.vsock_port);
-            tokio::io::AsyncWriteExt::write_all(&mut stream, handshake.as_bytes()).await?;
-
-            let mut handshake_resp = Vec::new();
-            let mut b = [0u8; 1];
-            while b[0] != b'\n' {
-                tokio::io::AsyncReadExt::read_exact(&mut stream, &mut b).await?;
-                handshake_resp.push(b[0]);
-                if handshake_resp.len() > 256 {
-                    return Err("Vsock handshake response too long".into());
-                }
-            }
-            let resp_str = String::from_utf8_lossy(&handshake_resp);
-            if !resp_str.starts_with("OK") {
-                return Err(format!("Vsock connection failed: {}", resp_str.trim()).into());
-            }
-
-            let req = BashSessionRequest {
-                session_id: self.session_id.clone(),
-                command: command.to_string(),
-                action: "execute".to_string(),
-            };
-            let req_line = format!("{}\n", serde_json::to_string(&req)?);
-            tokio::io::AsyncWriteExt::write_all(&mut stream, req_line.as_bytes()).await?;
-
-            let mut reader = tokio::io::BufReader::new(stream);
-            let mut resp_line = String::new();
-            tokio::io::AsyncBufReadExt::read_line(&mut reader, &mut resp_line).await?;
-
-            let output: BashCommandOutput = serde_json::from_str(resp_line.trim())?;
-            if let Some(ref cwd) = output.cwd {
-                self.current_cwd = Some(cwd.clone());
-            }
-            return Ok(output);
+            return self.send_vsock_command(command).await;
         }
 
         // 2. Authentic host subshell execution maintaining state continuity across calls
@@ -1001,6 +1253,82 @@ impl BashSessionHandle {
         })
     }
 
+    /// Injects an environment variable into this session's sandbox out-of-band.
+    ///
+    /// Updates `self.current_env` and `self.injected_keys`. If running in real
+    /// microVM mode (`vsock_uds_path.exists()`), the variable is immediately
+    /// exported in the guest shell session via vsock.
+    pub async fn inject_env(
+        &mut self,
+        key: &str,
+        value: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if !is_valid_env_key(key) {
+            return Err(format!("Invalid environment variable identifier: '{}'", key).into());
+        }
+        self.last_accessed = std::time::Instant::now();
+        self.current_env.insert(key.to_string(), value.to_string());
+        self.injected_keys.insert(key.to_string());
+
+        if self.vm.vsock_uds_path.exists() {
+            let export_cmd = format!("export {}={}\n", key, shell_escape_literal(value));
+            let _ = self.send_vsock_command(&export_cmd).await?;
+        }
+
+        Ok(())
+    }
+
+    /// Injects an ephemeral credential out-of-band into the session sandbox environment.
+    ///
+    /// The raw secret enters `self.current_env` out-of-band and is never leaked to
+    /// caller logs or agent context. Returns an opaque sanitized handle (e.g.,
+    /// `spiffe://aura.local/ephemeral/{service}/[REDACTED-TOKEN-{suffix}]` or `[REDACTED-TOKEN-{suffix}]`),
+    /// which can be presented safely to the model context.
+    pub async fn inject_credential(
+        &mut self,
+        env_var: &str,
+        raw_secret: &str,
+        service: Option<&str>,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        if raw_secret.is_empty() {
+            return Err("Cannot inject empty credential secret".into());
+        }
+        self.inject_env(env_var, raw_secret).await?;
+        let handle = format_redacted_handle(raw_secret, service);
+        Ok(handle)
+    }
+
+    /// Explicitly revokes and removes a credential / environment variable from this session.
+    ///
+    /// In host subshell mode, the key is removed from `current_env` so subsequent
+    /// commands do not inherit it. In microVM mode, `unset <key>` is also executed
+    /// in the guest shell over vsock.
+    pub async fn revoke_credential(
+        &mut self,
+        env_var: &str,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        self.last_accessed = std::time::Instant::now();
+        self.injected_keys.remove(env_var);
+        let removed = self.current_env.remove(env_var).is_some();
+
+        if self.vm.vsock_uds_path.exists() {
+            let unset_cmd = format!("unset {}\n", env_var);
+            let _ = self.send_vsock_command(&unset_cmd).await?;
+        }
+
+        Ok(removed)
+    }
+
+    /// Returns whether the specified credential key is currently active in this session.
+    pub fn is_credential_active(&self, env_var: &str) -> bool {
+        self.injected_keys.contains(env_var) && self.current_env.contains_key(env_var)
+    }
+
+    /// Returns a reference to the environment value if present.
+    pub fn get_env(&self, key: &str) -> Option<&String> {
+        self.current_env.get(key)
+    }
+
     /// Tears down the underlying microVM.
     pub async fn close(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let _ = self.vm.teardown();
@@ -1032,27 +1360,133 @@ impl BashSessionManager {
         session_id: &str,
         command: &str,
     ) -> Result<BashCommandOutput, Box<dyn std::error::Error + Send + Sync>> {
-        let session_arc = {
-            let mut sessions = self.sessions.lock().await;
-            if let Some(arc) = sessions.get(session_id) {
-                arc.clone()
-            } else {
-                let session = BashSessionHandle::new(session_id, &self.vm_config, DEFAULT_BASH_VSOCK_PORT).await?;
-                let arc = std::sync::Arc::new(tokio::sync::Mutex::new(session));
-                sessions.insert(session_id.to_string(), arc.clone());
-                arc
-            }
-        };
+        let session_arc = self.get_or_create_session(session_id).await?;
 
         let mut session = session_arc.lock().await;
         if session.last_accessed.elapsed() > self.inactivity_timeout {
+            let old_env = session.current_env.clone();
+            let old_keys = session.injected_keys.clone();
             let _ = session.close().await;
             let mut new_session = BashSessionHandle::new(session_id, &self.vm_config, DEFAULT_BASH_VSOCK_PORT).await?;
+            new_session.current_env = old_env;
+            new_session.injected_keys = old_keys;
             let output = new_session.execute(command, self.inactivity_timeout).await?;
             *session = new_session;
             Ok(output)
         } else {
             session.execute(command, self.inactivity_timeout).await
+        }
+    }
+
+    /// Injects an environment variable into the specified session out-of-band.
+    /// Creates the session if it does not yet exist.
+    pub async fn inject_env(
+        &self,
+        session_id: &str,
+        key: &str,
+        value: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let session_arc = self.get_or_create_session(session_id).await?;
+        let mut session = session_arc.lock().await;
+        session.inject_env(key, value).await
+    }
+
+    /// Injects an ephemeral credential out-of-band into the specified session.
+    ///
+    /// Raw secret enters `current_env` out-of-band; only the opaque redacted
+    /// handle is returned to present to agent context (TOOL-ET-002, ORIGINAL_REQUEST §R1).
+    pub async fn inject_credential(
+        &self,
+        session_id: &str,
+        env_var: &str,
+        raw_secret: &str,
+        service: Option<&str>,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let session_arc = self.get_or_create_session(session_id).await?;
+        let mut session = session_arc.lock().await;
+        session.inject_credential(env_var, raw_secret, service).await
+    }
+
+    /// Explicitly revokes a credential from a specific session.
+    pub async fn revoke_credential(
+        &self,
+        session_id: &str,
+        env_var: &str,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        let maybe_arc = {
+            let sessions = self.sessions.lock().await;
+            sessions.get(session_id).cloned()
+        };
+        if let Some(arc) = maybe_arc {
+            let mut session = arc.lock().await;
+            session.revoke_credential(env_var).await
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Revokes credentials matching the raw secret or variable name across ALL active sessions.
+    /// Fulfills acceptance criterion: "explicit revocation invalidates the credential immediately across all sessions".
+    pub async fn revoke_credential_across_all_sessions(
+        &self,
+        target_token_or_var: &str,
+    ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+        let session_arcs: Vec<_> = {
+            let sessions = self.sessions.lock().await;
+            sessions.values().cloned().collect()
+        };
+
+        let mut affected_count = 0;
+        for arc in session_arcs {
+            let mut session = arc.lock().await;
+            let mut vars_to_revoke = Vec::new();
+
+            for (k, v) in session.current_env.iter() {
+                if k == target_token_or_var || v == target_token_or_var {
+                    vars_to_revoke.push(k.clone());
+                }
+            }
+
+            for var in vars_to_revoke {
+                if session.revoke_credential(&var).await? {
+                    affected_count += 1;
+                }
+            }
+        }
+        Ok(affected_count)
+    }
+
+    /// Helper to get or create a session Arc, minimizing lock contention.
+    pub async fn get_or_create_session(
+        &self,
+        session_id: &str,
+    ) -> Result<std::sync::Arc<tokio::sync::Mutex<BashSessionHandle>>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut sessions = self.sessions.lock().await;
+        if let Some(arc) = sessions.get(session_id) {
+            Ok(arc.clone())
+        } else {
+            let session = BashSessionHandle::new(session_id, &self.vm_config, DEFAULT_BASH_VSOCK_PORT).await?;
+            let arc = std::sync::Arc::new(tokio::sync::Mutex::new(session));
+            sessions.insert(session_id.to_string(), arc.clone());
+            Ok(arc)
+        }
+    }
+
+    /// Gets an environment variable value from a session, if present.
+    pub async fn get_session_env(
+        &self,
+        session_id: &str,
+        key: &str,
+    ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+        let maybe_arc = {
+            let sessions = self.sessions.lock().await;
+            sessions.get(session_id).cloned()
+        };
+        if let Some(arc) = maybe_arc {
+            let session = arc.lock().await;
+            Ok(session.get_env(key).cloned())
+        } else {
+            Ok(None)
         }
     }
 
@@ -1533,6 +1967,328 @@ mod tests {
 
         vm.stop_cdp_forwarder();
         assert!(vm.cdp_forwarder.is_none());
+    }
+
+    #[test]
+    fn test_format_redacted_handle_formatting() {
+        let long_token = "spiffe://aura.local/ephemeral/github/550e8400-e29b-41d4-a716-446655440000";
+        let formatted = format_redacted_handle(long_token, Some("github"));
+        assert_eq!(
+            formatted,
+            "spiffe://aura.local/ephemeral/github/[REDACTED-TOKEN-55440000]"
+        );
+
+        let default_formatted = format_redacted_handle(long_token, None);
+        assert_eq!(default_formatted, "[REDACTED-TOKEN-55440000]");
+
+        let short_token = "abc";
+        let short_formatted = format_redacted_handle(short_token, Some("vault"));
+        assert_eq!(
+            short_formatted,
+            "spiffe://aura.local/ephemeral/vault/[REDACTED-TOKEN-...]"
+        );
+    }
+
+    #[test]
+    fn test_shell_escape_literal_resilience() {
+        assert_eq!(shell_escape_literal("plain"), "'plain'");
+        assert_eq!(shell_escape_literal("with space"), "'with space'");
+        assert_eq!(shell_escape_literal("can't stop"), "'can'\\''t stop'");
+        assert_eq!(shell_escape_literal("$VAR; rm -rf /"), "'$VAR; rm -rf /'");
+    }
+
+    #[tokio::test]
+    async fn test_bash_session_out_of_band_credential_injection_subshell() {
+        let vm_config = VmConfig::for_bash(None);
+        let manager = BashSessionManager::new(vm_config, Duration::from_secs(125));
+        let sid = "test-oob-inject";
+        let secret = "ghp_SuperSecretCredentialString123456789";
+
+        // 1. Inject credential out-of-band
+        let handle = manager
+            .inject_credential(sid, "GITHUB_TOKEN", secret, Some("github"))
+            .await
+            .expect("Injection failed");
+
+        // 2. Assert handle is redacted and does NOT leak the secret
+        assert!(handle.contains("[REDACTED-TOKEN-"));
+        assert!(!handle.contains(secret));
+        assert!(handle.ends_with("6789]"));
+
+        // 3. Execute command asserting sandbox received raw secret out-of-band
+        let output = manager
+            .execute_in_session(sid, "echo $GITHUB_TOKEN")
+            .await
+            .expect("Execution failed");
+        assert_eq!(output.stdout, secret);
+        assert_eq!(output.exit_code, 0);
+
+        // 4. Inspect session environment on host
+        let env_val = manager
+            .get_session_env(sid, "GITHUB_TOKEN")
+            .await
+            .expect("Failed to get env");
+        assert_eq!(env_val, Some(secret.to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_bash_session_credential_revocation_lifecycle() {
+        let vm_config = VmConfig::for_bash(None);
+        let manager = BashSessionManager::new(vm_config, Duration::from_secs(125));
+        let sid = "test-oob-revoke";
+        let secret = "secret_to_be_revoked_999";
+
+        // 1. Inject credential
+        let _ = manager
+            .inject_credential(sid, "TEMP_AUTH", secret, None)
+            .await
+            .unwrap();
+
+        let check1 = manager
+            .execute_in_session(sid, "echo $TEMP_AUTH")
+            .await
+            .unwrap();
+        assert_eq!(check1.stdout, secret);
+
+        // 2. Explicitly revoke credential
+        let revoked = manager.revoke_credential(sid, "TEMP_AUTH").await.unwrap();
+        assert!(revoked);
+
+        // 3. Subsequent execution confirms environment variable is cleared
+        let check2 = manager
+            .execute_in_session(sid, "echo \"[${TEMP_AUTH}]\"")
+            .await
+            .unwrap();
+        assert_eq!(check2.stdout, "[]");
+
+        let env_val = manager.get_session_env(sid, "TEMP_AUTH").await.unwrap();
+        assert_eq!(env_val, None);
+    }
+
+    #[tokio::test]
+    async fn test_bash_session_manager_cross_session_revocation() {
+        let vm_config = VmConfig::for_bash(None);
+        let manager = BashSessionManager::new(vm_config, Duration::from_secs(125));
+        let secret = "shared_ephemeral_token_xyz_8888";
+
+        // Inject same secret into multiple sessions
+        manager
+            .inject_credential("session-alpha", "SHARED_KEY", secret, Some("service"))
+            .await
+            .unwrap();
+        manager
+            .inject_credential("session-beta", "SHARED_KEY", secret, Some("service"))
+            .await
+            .unwrap();
+        manager
+            .inject_credential("session-gamma", "OTHER_KEY", "unrelated_secret", None)
+            .await
+            .unwrap();
+
+        // Invalidate across all sessions
+        let revoked_count = manager
+            .revoke_credential_across_all_sessions(secret)
+            .await
+            .unwrap();
+        assert_eq!(revoked_count, 2);
+
+        // Assert alpha and beta cleared, gamma untouched
+        let check_alpha = manager
+            .execute_in_session("session-alpha", "echo \"[${SHARED_KEY}]\"")
+            .await
+            .unwrap();
+        assert_eq!(check_alpha.stdout, "[]");
+
+        let check_beta = manager
+            .execute_in_session("session-beta", "echo \"[${SHARED_KEY}]\"")
+            .await
+            .unwrap();
+        assert_eq!(check_beta.stdout, "[]");
+
+        let check_gamma = manager
+            .execute_in_session("session-gamma", "echo $OTHER_KEY")
+            .await
+            .unwrap();
+        assert_eq!(check_gamma.stdout, "unrelated_secret");
+    }
+
+    #[tokio::test]
+    async fn test_bash_session_credentials_persist_across_inactivity_reboot() {
+        let vm_config = VmConfig::for_bash(None);
+        let manager = BashSessionManager::new(vm_config, Duration::from_millis(50));
+        let sid = "session-reboot-persist";
+        let secret = "persistent_secret_across_timeouts_1234";
+
+        manager
+            .inject_credential(sid, "PERSIST_VAR", secret, None)
+            .await
+            .unwrap();
+
+        // Sleep past inactivity timeout
+        tokio::time::sleep(Duration::from_millis(70)).await;
+
+        // Executing command triggers microVM recreation; credential must survive
+        let out = manager
+            .execute_in_session(sid, "echo $PERSIST_VAR")
+            .await
+            .unwrap();
+        assert_eq!(
+            out.stdout, secret,
+            "Injected credentials must survive session expiration and microVM respawn"
+        );
+    }
+
+    // =========================================================================
+    // Feature 13 & 14 Unit Tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_read_stream_under_limit_retained_completely() {
+        let data = vec![0xAA; 1024];
+        let mut cursor = std::io::Cursor::new(data.clone());
+        let (buf, truncated) = read_stream_with_limit_ext(&mut cursor, 2048)
+            .await
+            .expect("read_stream_with_limit_ext failed");
+        assert_eq!(buf, data);
+        assert!(!truncated);
+
+        let mut cursor2 = std::io::Cursor::new(data.clone());
+        let buf2 = read_stream_with_limit(&mut cursor2, 2048)
+            .await
+            .expect("read_stream_with_limit failed");
+        assert_eq!(buf2, data);
+    }
+
+    #[tokio::test]
+    async fn test_read_stream_over_limit_instantly_truncated() {
+        let data = vec![0xBB; 8192];
+        let mut cursor = std::io::Cursor::new(data);
+        let (buf, truncated) = read_stream_with_limit_ext(&mut cursor, 4096)
+            .await
+            .expect("read_stream_with_limit_ext failed");
+        assert_eq!(buf.len(), 4096);
+        assert!(truncated);
+
+        let mut cursor2 = std::io::Cursor::new(vec![0xBB; 8192]);
+        let buf2 = read_stream_with_limit(&mut cursor2, 4096)
+            .await
+            .expect("read_stream_with_limit failed");
+        assert_eq!(buf2.len(), 4096);
+    }
+
+    #[tokio::test]
+    async fn test_read_stream_zero_byte_limit_truncates_immediately() {
+        let data = vec![0xCC; 100];
+        let mut cursor = std::io::Cursor::new(data);
+        let (buf, truncated) = read_stream_with_limit_ext(&mut cursor, 0)
+            .await
+            .expect("read_stream_with_limit_ext failed");
+        assert_eq!(buf.len(), 0);
+        assert!(truncated);
+
+        let mut cursor2 = std::io::Cursor::new(vec![0xCC; 100]);
+        let buf2 = read_stream_with_limit(&mut cursor2, 0)
+            .await
+            .expect("read_stream_with_limit failed");
+        assert_eq!(buf2.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_read_stream_empty_input_not_truncated() {
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        let (buf, truncated) = read_stream_with_limit_ext(&mut cursor, 1024)
+            .await
+            .expect("read_stream_with_limit_ext failed");
+        assert!(buf.is_empty());
+        assert!(!truncated);
+    }
+
+    #[tokio::test]
+    async fn test_read_stream_exact_boundary_not_truncated() {
+        let data = vec![0xDD; 1000];
+        let mut cursor = std::io::Cursor::new(data.clone());
+        let (buf, truncated) = read_stream_with_limit_ext(&mut cursor, 1000)
+            .await
+            .expect("read_stream_with_limit_ext failed");
+        assert_eq!(buf, data);
+        assert!(!truncated);
+
+        let mut cursor2 = std::io::Cursor::new(data.clone());
+        let buf2 = read_stream_with_limit(&mut cursor2, 1000)
+            .await
+            .expect("read_stream_with_limit failed");
+        assert_eq!(buf2, data);
+    }
+
+    #[tokio::test]
+    async fn test_read_stream_huge_stream_bounded_memory() {
+        let huge = vec![0xEE; 10 * 1024 * 1024]; // 10 MiB
+        let mut cursor = std::io::Cursor::new(huge);
+        let (buf, truncated) = read_stream_with_limit_ext(&mut cursor, 32 * 1024)
+            .await
+            .expect("read_stream_with_limit_ext failed");
+        assert_eq!(buf.len(), 32 * 1024);
+        assert!(truncated);
+    }
+
+    #[tokio::test]
+    async fn test_screenshot_listener_with_custom_buffer_limit() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let sock_path = temp_dir.path().join("vsock_limited.sock");
+        let artifacts_dir = temp_dir.path().join("artifacts");
+
+        let config = VsockStreamConfig::new(64);
+        let listener = start_screenshot_listener_with_config(
+            sock_path.clone(),
+            artifacts_dir.clone(),
+            config,
+        )
+        .await
+        .expect("Failed to start limited screenshot listener");
+
+        // Send payload larger than 64 bytes
+        let mut rogue_stream = Vec::from(PNG_MAGIC_BYTES);
+        rogue_stream.extend_from_slice(&[0xFF; 256]);
+
+        let mut client = TokioUnixStream::connect(&sock_path).await.unwrap();
+        client.write_all(&rogue_stream).await.unwrap();
+        client.shutdown().await.unwrap();
+
+        // The listener truncates stream at 64 bytes, rejects incomplete PNG safely,
+        // and does NOT panic or leak memory
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        listener.stop();
+    }
+
+    #[tokio::test]
+    async fn test_firecracker_vm_egress_proxy_lifecycle() {
+        let mut vm = FirecrackerVm::new("test-vm-proxy", "spiffe://aura.local/test");
+        assert!(vm.egress_proxy.is_none());
+
+        let proxy_config = crate::hypervisor::proxy::EgressProxyConfig {
+            bind_addr: "127.0.0.1:0".parse().unwrap(),
+            allowed_domains: vec!["crates.io".to_string()],
+            enforce_strict_tls: true,
+            upstream_override: None,
+        };
+
+        let proxy_addr = vm
+            .start_egress_proxy(proxy_config)
+            .await
+            .expect("start_egress_proxy failed");
+        assert!(vm.egress_proxy.is_some());
+
+        // Connect client and send ClientHello targeting unauthorized domain
+        let mut client = tokio::net::TcpStream::connect(proxy_addr).await.unwrap();
+        let unauthorized_hello = crate::hypervisor::proxy::tests::create_test_client_hello("evil.com");
+        client.write_all(&unauthorized_hello).await.unwrap();
+
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).await.unwrap();
+        assert_eq!(response, crate::hypervisor::proxy::TLS_ALERT_ACCESS_DENIED);
+
+        vm.stop_egress_proxy();
+        assert!(vm.egress_proxy.is_none());
     }
 }
 

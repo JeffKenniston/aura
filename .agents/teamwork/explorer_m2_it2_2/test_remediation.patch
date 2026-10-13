@@ -1,0 +1,131 @@
+--- a/aura-sdk/tests/test_computer_tool.py
++++ b/aura-sdk/tests/test_computer_tool.py
+@@ -422,3 +422,96 @@
+     await client.close()
+     await daemon.stop()
++
++
++@pytest.mark.asyncio
++async def test_computer_client_auto_reconnect_after_server_disconnect():
++    """Verifies that AsyncComputerClient resets state on connection drop and auto-reconnects."""
++    cmd_count = 0
++
++    async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
++        nonlocal cmd_count
++        while True:
++            line = await reader.readline()
++            if not line:
++                break
++            cmd_count += 1
++            if cmd_count == 1:
++                writer.write(b'{"jsonrpc": "2.0", "id": 1, "result": {"status": "ok_1"}}\n')
++                await writer.drain()
++            elif cmd_count == 2:
++                # Abruptly sever connection mid-flight on 2nd command
++                writer.close()
++                await writer.wait_closed()
++                break
++            else:
++                # Subsequent command on new connection
++                req = json.loads(line.decode("utf-8").strip())
++                resp = {"jsonrpc": "2.0", "id": req["id"], "result": {"status": "ok_reconnected"}}
++                writer.write(json.dumps(resp).encode("utf-8") + b"\n")
++                await writer.drain()
++
++    server = await asyncio.start_server(handle_client, "127.0.0.1", 0)
++    port = server.sockets[0].getsockname()[1]
++    client = AsyncComputerClient(host="127.0.0.1", port=port, timeout=2.0)
++
++    try:
++        # 1. Command 1 succeeds
++        r1 = await client.send_command("move", {"x": 10, "y": 10})
++        assert r1 == {"status": "ok_1"}
++        assert client.is_connected is True
++
++        # 2. Command 2 fails mid-flight when server abruptly drops
++        with pytest.raises(ConnectionResetError, match="Connection closed by computer daemon"):
++            await client.send_command("move", {"x": 20, "y": 20})
++
++        # Assert client handles are reset to None and is_connected is False
++        assert client.is_connected is False
++        assert client._writer is None
++        assert client._reader is None
++
++        # 3. Command 3 automatically reconnects and succeeds!
++        r3 = await client.send_command("move", {"x": 30, "y": 30})
++        assert r3 == {"status": "ok_reconnected"}
++        assert client.is_connected is True
++    finally:
++        await client.close()
++        server.close()
++        await server.wait_closed()
++
++
++@pytest.mark.asyncio
++async def test_computer_client_read_timeout_cleanup():
++    """Verifies that AsyncComputerClient resets state on read timeout."""
++    async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
++        line = await reader.readline()
++        if line:
++            await asyncio.sleep(5.0)
++
++    server = await asyncio.start_server(handle_client, "127.0.0.1", 0)
++    port = server.sockets[0].getsockname()[1]
++    client = AsyncComputerClient(host="127.0.0.1", port=port, timeout=0.1)
++
++    try:
++        with pytest.raises(asyncio.TimeoutError):
++            await client.send_command("hang_method")
++
++        assert client.is_connected is False
++        assert client._writer is None
++        assert client._reader is None
++    finally:
++        await client.close()
++        server.close()
++        await server.wait_closed()
++
++
++@pytest.mark.asyncio
++async def test_computer_tool_high_level_resilience():
++    """Verifies that high-level ComputerTool survives transient disconnection."""
++    cmd_count = 0
++
++    async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
++        nonlocal cmd_count
++        while True:
++            line = await reader.readline()
++            if not line:
++                break
++            cmd_count += 1
++            req = json.loads(line.decode("utf-8").strip())
++            if cmd_count == 2:
++                # Sever connection on 2nd command
++                writer.close()
++                await writer.wait_closed()
++                break
++            resp = {"jsonrpc": "2.0", "id": req["id"], "result": {"status": "ok", "action": req["method"]}}
++            writer.write(json.dumps(resp).encode("utf-8") + b"\n")
++            await writer.drain()
++
++    server = await asyncio.start_server(handle_client, "127.0.0.1", 0)
++    port = server.sockets[0].getsockname()[1]
++    client = AsyncComputerClient(host="127.0.0.1", port=port, timeout=2.0)
++    tool = ComputerTool(daemon_client=client)
++
++    try:
++        # First call succeeds
++        res1 = await tool.move(10, 20)
++        assert res1["status"] == "ok"
++
++        # Second call fails due to disconnect
++        with pytest.raises(ConnectionResetError):
++            await tool.move(30, 40)
++
++        # Third call transparently reconnects and succeeds
++        res3 = await tool.move(50, 60)
++        assert res3["status"] == "ok"
++    finally:
++        await tool.close()
++        server.close()
++        await server.wait_closed()

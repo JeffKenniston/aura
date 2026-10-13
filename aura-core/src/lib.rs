@@ -4,6 +4,7 @@ pub mod hypervisor;
 pub mod identity;
 pub mod knowledge;
 pub mod runtime;
+pub mod storage;
 pub mod supervisor;
 pub mod transport;
 

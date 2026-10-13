@@ -4,6 +4,7 @@ use std::io::Write;
 use std::process;
 
 mod capture;
+mod input;
 mod server;
 
 #[derive(Debug)]

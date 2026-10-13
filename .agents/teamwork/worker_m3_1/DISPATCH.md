@@ -1,71 +1,83 @@
-# Dispatch for Worker M3 Implementation
+## 2026-10-11T23:36:42Z
+You are worker_m3_1, a teamwork_preview_worker implementing Milestone 3: Microkernel Zero-Trust Security & Storage Encryption (Features 13-17) in Aura.
 
-You are `worker_m3_1` (role: `teamwork_preview_worker`).
-Your assigned working directory is `/home/jeff/aura/.agents/teamwork/worker_m3_1/`.
+Your working directory is: /home/jeff/aura/.agents/teamwork/worker_m3_1
+Parent Orchestrator Conversation ID: 1732b97a-66c1-4a05-9f2b-afc669944583
 
-## Mandatory Reading:
-- User Request: `/home/jeff/aura/.agents/teamwork/ORIGINAL_REQUEST.md` (R3)
-- Master Baseline: `/home/jeff/aura/M0_M3_Audit_Report.md` (§ BUS-003, EXE-VM-002, EXE-VM-011)
-- Scope: `/home/jeff/aura/.agents/teamwork/orchestrator_7/PROJECT.md`
-- Implementation Survey: `/home/jeff/aura/.agents/teamwork/explorer_impl_survey_2/handoff.md` (§ 1.2, 1.3, 1.4, 2.2, 2.3, 2.4, 3.2, 3.3, 3.4)
-- Repository Constitution: `/home/jeff/aura/AGENTS.md` (Strict zero mock/stub policy)
-- Domain Skills:
-  - `/home/jeff/aura/.agents/plugins/aura-dev-kit/skills/aura-bus-domain/SKILL.md`
-  - `/home/jeff/aura/.agents/plugins/aura-dev-kit/skills/aura-exe-vm-domain/SKILL.md`
-
-## Milestone 3 Tasks:
-### 1. BUS-003: Authentic Zenoh Task Dispatch with Dynamic SVID & Real Execution
-Target File: `aura-core/src/bus/mod.rs`
-- Enhance `TaskPayload` with optional fields:
-  - `payload: Option<serde_json::Value>`
-  - `svid: Option<String>`
-  - `fuel_budget: Option<u64>`
-- Enhance `TaskResult` with execution telemetry:
-  - `stdout: String`, `stderr: String`, `exit_code: i32`, `duration_ms: u64`
-  - Preserve `result: String` for backward compatibility.
-- In `start_task_listener`:
-  - Dynamically extract SVID: from `task.svid`, `task.agent` (if SPIFFE formatted), or topic key expression prefix.
-  - Enforce capability validation via `CapabilityEnforcer::validate_svid(&svid_str)` (replace synthetic `"mock_jwt"`).
-  - Enforce rate limiting via `limiter.check_and_consume(&svid_str)` (replace synthetic `"spiffe://aura.local/agent/1"`).
-  - Replace the synthetic string formatting (`format!("Executed {} in WASM", task.instruction)`) with real execution dispatch:
-    - Route `task.instruction` through `Registry` or execute via `hypervisor::wasm` (for WASM components) or `FirecrackerVm` (for Firecracker).
-    - Capture real stdout, stderr, exit code, and execution duration.
-  - Update `test_task_dispatch_and_completion` to verify real execution output and fields.
-
-### 2. EXE-VM-002: Host `/dev/kvm` Nested Virtualization Validation & Error Propagation
-Target File: `aura-core/src/hypervisor/firecracker.rs` & `aura-core/src/hypervisor/mod.rs`
-- Implement `pub fn validate_kvm_support() -> Result<(), KvmError>`:
-  - Check existence and read/write opening of `/dev/kvm`.
-  - Distinguish between `KvmDeviceNotFound` (file doesn't exist) and `KvmPermissionDenied` (permission error).
-  - Support `AURA_SKIP_KVM_VALIDATION=1` environment variable override for containerized/CI environments.
-  - Integrate `validate_kvm_support()` into `hypervisor::init_firecracker()`.
-  - Add unit tests verifying:
-    - Error propagation when `/dev/kvm` is missing or inaccessible.
-    - Behavior when `AURA_SKIP_KVM_VALIDATION=1` is set.
-
-### 3. EXE-VM-011: Guest Filesystem Layering & Base Image Immutability
-Target File: `aura-core/src/hypervisor/firecracker.rs`
-- In `VmConfig`: add `is_read_only_rootfs: bool` (default true) and `scratch_disk_path: Option<String>`.
-- In `FirecrackerVm::configure_and_boot()`:
-  - Configure root block device PUT `/drives/rootfs` with `"is_read_only": true`.
-  - Set kernel boot args to include `ro root=/dev/vda`.
-  - If `scratch_disk_path` is present, configure secondary drive PUT `/drives/scratch` (read-write on `/dev/vdb`).
-  - In `teardown()`, clean up any ephemeral scratch disk image files.
-  - Add unit tests asserting `"is_read_only": true` on the rootfs drive JSON payload.
-
-### 4. Build & Test Verification:
-- Run `cargo check --all-targets`
-- Run `cargo test -p aura-core` (all tests must pass with 0 failures)
-- Ensure zero warnings, zero mocks, zero stubs in production code.
-
-Write complete results and test logs in `/home/jeff/aura/.agents/teamwork/worker_m3_1/handoff.md`.
-
-## Mandatory Integrity Warning:
+MANDATORY INTEGRITY WARNING:
 DO NOT CHEAT. All implementations must be genuine. DO NOT hardcode test results, create dummy/facade implementations, or circumvent the intended task. A teamwork_preview_auditor will independently verify your work. Integrity violations WILL be detected and your work WILL be rejected.
 
+MANDATORY: Read the authoritative user request first:
+/home/jeff/aura/.agents/teamwork/ORIGINAL_REQUEST.md
 
-## 2026-10-11T03:36:27Z
-Received message from orchestrator:
-You are worker_m3_1 (role: teamwork_preview_worker).
-Your working directory is `/home/jeff/aura/.agents/teamwork/worker_m3_1/`.
-Read your task assignment in `/home/jeff/aura/.agents/teamwork/worker_m3_1/DISPATCH.md`.
+Also read:
+- /home/jeff/aura/PROJECT.md
+- /home/jeff/aura/.agents/teamwork/explorer_m3_1/strategy_report.md
+- /home/jeff/aura/.agents/teamwork/explorer_m3_2/strategy_report.md
+- /home/jeff/aura/.agents/teamwork/explorer_m3_3/strategy_report.md
+- /home/jeff/aura/.agents/plugins/aura-dev-kit/skills/aura-host-domain/SKILL.md
+- /home/jeff/aura/.agents/plugins/aura-dev-kit/skills/aura-iam-domain/SKILL.md
+
+File Write Ownership (Exclusive):
+- aura-core/Cargo.toml
+- aura-core/src/lib.rs
+- aura-core/src/hypervisor/firecracker.rs
+- aura-core/src/hypervisor/mod.rs
+- aura-core/src/hypervisor/proxy.rs
+- aura-core/src/storage/mod.rs
+- aura-core/src/storage/encrypted.rs
+- aura-core/src/storage/ledger.rs
+
+Tasks:
+1. In `aura-core/Cargo.toml`:
+   - Add `aes-gcm = "0.10.3"`.
+   - Update `rusqlite` dependency to ensure `features = ["backup", "serialize"]`.
+
+2. In `aura-core/src/hypervisor/firecracker.rs`:
+   - Implement `VsockStreamConfig { pub max_buffer_bytes: usize }` with default (e.g. 16MB).
+   - Implement `VsockStreamError` (enum with `LimitExceeded { limit: usize, received: usize }`, `Io(std::io::Error)`, etc.).
+   - Implement `read_stream_with_limit<R: AsyncRead + Unpin>(&mut R, max_bytes: usize) -> Result<Vec<u8>, VsockStreamError>`:
+     Reads stream in chunks (e.g. 64KB). If total bytes exceed `max_bytes`, instantly truncates stream and returns error or truncated slice without unbounded memory consumption or panic.
+   - Refactor `start_screenshot_listener` to use `VsockStreamConfig`.
+   - Add unit tests for `read_stream_with_limit` (happy path, exact limit, limit exceeded truncation).
+
+3. In `aura-core/src/hypervisor/proxy.rs` & `aura-core/src/hypervisor/mod.rs`:
+   - Re-export `EgressProxy`, `EgressProxyConfig`, `EgressProxyHandle`, `TLS_ALERT_ACCESS_DENIED` in `aura_core::hypervisor`.
+   - Wire `egress_proxy: Option<EgressProxyHandle>` into `FirecrackerVm` lifecycle with RAII cleanup on stop/drop.
+
+4. In `aura-core/src/lib.rs` & `aura-core/src/storage/`:
+   - Add `pub mod storage;` in `aura-core/src/lib.rs`.
+   - Implement `aura-core/src/storage/encrypted.rs`:
+     * Implement `derive_storage_key(svid: &Svid) -> [u8; 32]`:
+       Derives 256-bit key using BLAKE3 KDF: `blake3::derive_key("aura-storage-encryption-v1", svid.spiffe_id().as_bytes())`.
+     * Implement `EncryptedDatabase`:
+       - Envelope format: `b"AURA"` (4 bytes) + `1u8` (version 1) + 12-byte random nonce + ciphertext (AES-256-GCM encrypted serialized sqlite db) + 16-byte auth tag.
+       - Operates in RAM via `rusqlite::Connection::open_in_memory()`.
+       - On `open(path, key)`: if file exists, reads envelope, verifies magic/version, decrypts with AES-256-GCM, deserializes into in-memory sqlite connection via `deserialize`. Returns `StorageError::AuthenticationError` on wrong key, corrupted nonce, or tampered tag. If file does not exist, initializes new in-memory connection and saves encrypted file on disk.
+       - On `flush(&self) -> Result<(), StorageError>`: serializes in-memory connection via `conn.serialize()`, generates fresh random 12-byte nonce, encrypts with AES-256-GCM, writes envelope atomically to disk using a tempfile and rename.
+       - Implement `StorageError` with proper error types.
+   - Implement `aura-core/src/storage/ledger.rs`:
+     * Implement `TaskState` (Pending, Running, Completed, Failed, Cancelled) and `TaskEvent` (`task_id`, `state`, `timestamp`, `metadata`, `transition_reason`).
+     * Implement `TaskLedger`:
+       - Backed by `Arc<EncryptedDatabase>`.
+       - `new(db: Arc<EncryptedDatabase>) -> Result<Self, StorageError>` creates schema if not exists: `CREATE TABLE IF NOT EXISTS task_events (id INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL, state TEXT NOT NULL, timestamp INTEGER NOT NULL, metadata TEXT, transition_reason TEXT);`
+       - `append_event(&self, event: &TaskEvent) -> Result<(), StorageError>`: inserts record and calls `db.flush()`.
+       - `get_events(&self, task_id: &str) -> Result<Vec<TaskEvent>, StorageError>`: queries and returns events for given `task_id` ordered by id.
+   - Add tests in `storage/` covering:
+     * Key derivation from SVID
+     * Roundtrip storage encryption and decryption
+     * Wrong key rejection and tampering rejection
+     * Raw disk byte inspection: read disk file bytes, assert `b"AURA\x01"` header present, assert `b"SQLite format 3\0"` NOT present anywhere in file bytes, assert table names (`task_events`) and task strings NOT present in raw bytes.
+
+5. Verification Commands:
+   - `cargo test -p aura-core --jobs 1`
+   - `cargo test -p aura-core --test m5_e2e_opaque_test`
+   - `cargo test --manifest-path deploy/images/vsock-screenshot-daemon/Cargo.toml`
+   - `cargo test --manifest-path tools/ephemeral-tunnel/Cargo.toml`
+   - `/home/jeff/aura/aura-sdk/.venv/bin/pytest aura-sdk/tests`
+   - `/home/jeff/aura/aura-sdk/.venv/bin/ruff check aura-sdk/aura_sdk aura-sdk/tests`
+
+6. Output:
+   - Update `progress.md` in your working directory.
+   - Write a complete `handoff.md` in your working directory detailing changes made, test commands and passing outputs, and layout compliance.
+   - Send completion message to parent with report path.

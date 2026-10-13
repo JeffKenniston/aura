@@ -1,29 +1,31 @@
-# Dispatch for Forensic Auditor M2
+## 2026-10-11T22:44:19Z
+You are auditor_m2_1, a teamwork_preview_auditor performing forensic integrity verification for Milestone 2 in Aura.
 
-You are `auditor_m2_1` (role: Forensic Auditor, type: `teamwork_preview_auditor`).
-Your assigned working directory is `/home/jeff/aura/.agents/teamwork/auditor_m2_1/`.
+Your working directory is: /home/jeff/aura/.agents/teamwork/auditor_m2_1
+Parent Orchestrator Conversation ID: 1732b97a-66c1-4a05-9f2b-afc669944583
 
-## Mandatory Reading:
-- User Request: `/home/jeff/aura/.agents/teamwork/ORIGINAL_REQUEST.md`
-- Master Baseline: `/home/jeff/aura/M0_M3_Audit_Report.md` (§ HOST-011, NET-007)
-- Scope: `/home/jeff/aura/.agents/teamwork/orchestrator_7/PROJECT.md`
-- Repository Constitution: `/home/jeff/aura/AGENTS.md` (Strict zero mock/stub policy)
-- Worker M2 Handoff: `/home/jeff/aura/.agents/teamwork/worker_m2_2/handoff.md`
+MANDATORY: Read the authoritative user request first:
+/home/jeff/aura/.agents/teamwork/ORIGINAL_REQUEST.md
 
-## Milestone 2 Files to Inspect & Audit:
-1. `aura-core/src/runtime/registry.rs` (HOST-011)
-2. `aura-core/src/transport/mcp.rs` (NET-007)
-3. `aura-core/src/transport/mod.rs`
-4. `aura-core/src/config/mod.rs`
+Also read:
+- /home/jeff/aura/PROJECT.md
+- /home/jeff/aura/deploy/images/vsock-screenshot-daemon/
+- /home/jeff/aura/aura-sdk/aura_sdk/tools/computer.py
+- /home/jeff/aura/aura-sdk/tests/test_computer_tool.py
 
-## Mandatory Tasks:
-1. Run all forensic integrity checks on the M2 implementation files.
-2. Verify that there are ABSOLUTELY NO mocks, stubs, TODOs, or fake test results in production code (AGENTS.md).
-3. Verify that `registry.rs` uses genuine Serde TOML manifest deserialization (`load_from_config`, `load_from_str`, `from_manifest`, `validate_file_paths`), and that the mock path check (`if path.contains("test")`) is completely removed.
-4. Verify that `transport/mcp.rs` implements an authentic stateless JSON-RPC 2.0 MCP server handling `tools/list` and `tools/call`.
-5. Execute `cargo test -p aura-core --lib runtime::registry::tests`
-6. Execute `cargo test -p aura-core --lib transport::mcp::tests`
-7. Execute `cargo test -p aura-core` (all 118 tests must pass).
-8. Write your comprehensive audit report in `/home/jeff/aura/.agents/teamwork/auditor_m2_1/handoff.md`.
-9. Conclude with a clear binary verdict: **CLEAN** or **INTEGRITY VIOLATION**.
-10. Send a message to orchestrator with your verdict and findings.
+Forensic Integrity Verification:
+1. Static analysis:
+   - Check for hardcoded test inputs/outputs (e.g. checking specific coordinates or returning dummy PNGs).
+   - Check for dummy/facade implementations, stubs, mocks, or TODOs in daemon or Python SDK.
+   - Verify that logic in `vsock-screenshot-daemon` (plane_mask, input, server) and `aura-sdk` (scanline redaction, ComputerTool) is authentic, genuine, and production-grade.
+2. Dynamic analysis:
+   - Run `cargo test --manifest-path deploy/images/vsock-screenshot-daemon/Cargo.toml`.
+   - Run `cargo test -p aura-core --jobs 1`.
+   - Run `cargo test -p aura-core --test m5_e2e_opaque_test`.
+   - Run `/home/jeff/aura/aura-sdk/.venv/bin/pytest aura-sdk/tests`.
+   - Run `/home/jeff/aura/aura-sdk/.venv/bin/ruff check aura-sdk/aura_sdk aura-sdk/tests`.
+3. Integrity Verdict:
+   - If ANY cheating, hardcoding, or facade pattern is found, emit INTEGRITY VIOLATION.
+   - If code is authentic and production-grade, emit CLEAN.
+4. Write `handoff.md` in your working directory stating your explicit verdict: CLEAN or INTEGRITY VIOLATION.
+5. Send completion message to parent with report path and verdict.

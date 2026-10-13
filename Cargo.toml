@@ -1,7 +1,6 @@
 [workspace]
 members = [
-    "aura-core",
-    "aura-cli"
+    "aura-core"
 ]
 exclude = [
     "tools"

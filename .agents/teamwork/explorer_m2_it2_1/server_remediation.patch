@@ -1,0 +1,43 @@
+--- a/deploy/images/vsock-screenshot-daemon/src/server.rs
++++ b/deploy/images/vsock-screenshot-daemon/src/server.rs
+@@ -62,17 +62,29 @@ pub fn handle_client_interactive<R: BufRead, W: Write>(
+                 line.clear();
+ 
+                 // Persistent command loop over same connection
+-                while reader.read_line(&mut line)? > 0 {
+-                    let trimmed = line.trim();
+-                    if !trimmed.is_empty() {
+-                        if let Some(resp) = executor.process_line(trimmed) {
+-                            let resp_str = serde_json::to_string(&resp)?;
+-                            writer.write_all(resp_str.as_bytes())?;
+-                            writer.write_all(b"\n")?;
+-                            writer.flush()?;
++                loop {
++                    match reader.read_line(&mut line) {
++                        Ok(0) => break, // EOF: client cleanly closed connection
++                        Ok(_) => {
++                            let trimmed = line.trim();
++                            if !trimmed.is_empty() {
++                                if let Some(resp) = executor.process_line(trimmed) {
++                                    let resp_str = serde_json::to_string(&resp)?;
++                                    writer.write_all(resp_str.as_bytes())?;
++                                    writer.write_all(b"\n")?;
++                                    writer.flush()?;
++                                }
++                            }
++                            line.clear();
+                         }
++                        Err(e)
++                            if e.kind() == std::io::ErrorKind::WouldBlock
++                                || e.kind() == std::io::ErrorKind::TimedOut =>
++                        {
++                            // Inter-command latency: client is idle between agent actions.
++                            // Continue waiting for subsequent commands over persistent connection.
++                            continue;
++                        }
++                        Err(e) => return Err(Box::new(e)),
+                     }
+-                    line.clear();
+                 }
+                 Ok(())
+             } else {

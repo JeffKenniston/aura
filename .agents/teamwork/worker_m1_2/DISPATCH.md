@@ -1,27 +1,21 @@
-# Dispatch for Worker M1_2
+## 2026-10-11T17:50:48Z
+Your identity is worker_m1_2.
+Your working directory is: /home/jeff/aura/.agents/teamwork/worker_m1_2
+You MUST read /home/jeff/aura/.agents/teamwork/ORIGINAL_REQUEST.md before starting work.
+You MUST read /home/jeff/aura/PROJECT.md before starting work.
 
-You are `worker_m1_2` (role: `teamwork_preview_worker`).
-Your working directory is: `/home/jeff/aura/.agents/teamwork/worker_m1_2/`
-
-## Objective:
-Verify Milestone 1: Runtime & Concurrency (M0-SPIKE-03, HOST-002, HOST-004).
-
-## Context:
-`worker_m1_1` has authored the following files for Milestone 1:
-1. `.cargo/config.toml` (rustflags enabling `tokio_unstable`)
-2. `aura-core/src/config/mod.rs` (RuntimeConfig, defaults 10,000 max streams, 50MB window)
-3. `aura-core/src/runtime/mod.rs` (Runtime pool builder, metrics via `tokio_unstable`, blocking compute isolation)
-4. `aura-core/src/lib.rs` (Runtime registration, run_with_config)
-5. `aura-cli/src/main.rs` (CLI bootstrap with runtime pool)
-6. `aura-core/src/transport/http3.rs` (QUIC config with 10k streams and large receive window)
-7. `aura-core/tests/http3_stream_concurrency_test.rs` (empirical QUIC 5k stream concurrency test)
-
-## Mandatory Tasks:
-1. Run `cargo test -p aura-core` to verify all 103 unit tests pass.
-2. Run `cargo test -p aura-core --test http3_stream_concurrency_test -- --nocapture` to verify 5,000 stream concurrency test passes.
-3. Check `cargo check --all-targets` and verify no warnings or errors.
-4. If any tests fail, inspect and fix the implementation in the M1 files without using any mocks or stubs.
-5. Write your complete verification results and test outputs in `/home/jeff/aura/.agents/teamwork/worker_m1_2/handoff.md`.
-
-## Mandatory Integrity Warning:
+MANDATORY INTEGRITY WARNING:
 DO NOT CHEAT. All implementations must be genuine. DO NOT hardcode test results, create dummy/facade implementations, or circumvent the intended task. A teamwork_preview_auditor will independently verify your work. Integrity violations WILL be detected and your work WILL be rejected.
+
+Context & Resumption:
+You are replacing worker_m1_1 after server restart.
+Review /home/jeff/aura/.agents/teamwork/worker_m1_1/progress.md:
+- Task 1 was completed: `tools/ephemeral-tunnel` already has credentials Display/Debug redaction, OnceLock in lib.rs, spire.rs, and unit tests. Verify by running `cargo test --manifest-path tools/ephemeral-tunnel/Cargo.toml`.
+- Task 2: Implement `aura-core/src/knowledge/git.rs` changes (apply `/home/jeff/aura/.agents/teamwork/teamwork_preview_explorer_m1_2/milestone1_git_manager.patch` or use the drop-in source in `/home/jeff/aura/.agents/teamwork/teamwork_preview_explorer_m1_2/proposed_git.rs`). Reconcile `aura-core/tests/m4_empirical_git_stress_test.rs`.
+- Task 3: Implement `aura-core/src/hypervisor/firecracker.rs` out-of-band credential injection methods (`BashSessionHandle::inject_credential`, `inject_env`, `BashSessionManager::inject_credential`, `revoke_credential_across_all_sessions`, session timeout state copy) as specified in `/home/jeff/aura/.agents/teamwork/teamwork_preview_explorer_m1_3/strategy_report.md`.
+- Verification:
+  - `cargo test --manifest-path tools/ephemeral-tunnel/Cargo.toml`
+  - `cargo test -p aura-core --jobs 1`
+  Ensure all tests pass with zero regressions!
+
+Write your handoff report to /home/jeff/aura/.agents/teamwork/worker_m1_2/handoff.md and notify with send_message when complete.

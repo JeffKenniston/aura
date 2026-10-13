@@ -1,119 +1,84 @@
-# Milestone 3 Handoff Report: BUS-003, EXE-VM-002, EXE-VM-011
+# Milestone 3 Handoff Report: Microkernel Zero-Trust Security & Storage Encryption (Features 13-17)
 
-**Agent ID**: `worker_m3_1`  
-**Parent / Orchestrator**: `b0e73c5b-179f-432b-9bbd-ebac6eea2996`  
-**Date**: 2026-10-11  
-**Status**: COMPLETE  
+**Agent**: `worker_m3_1` (teamwork_preview_worker)  
+**Parent Orchestrator**: `1732b97a-66c1-4a05-9f2b-afc669944583`  
+**Working Directory**: `/home/jeff/aura/.agents/teamwork/worker_m3_1`  
+**Date**: 2026-10-12  
 
 ---
 
 ## 1. Observation
 
-### 1.1 Requirements Observed
-From `DISPATCH.md` and user requirements:
-1. **BUS-003**: In `aura-core/src/bus/mod.rs`, enhance `TaskPayload` and `TaskResult`, implement 4-strategy dynamic SVID extraction, enforce dynamic capability checking (`CapabilityEnforcer::validate_svid(&svid_str)`) and rate limiting (`limiter.check_and_consume(&svid_str)`), and replace simulated string formatting with genuine execution dispatch via `Registry` / Wasmtime Cranelift JIT engine and Firecracker microVMs.
-2. **EXE-VM-002**: In `aura-core/src/hypervisor/firecracker.rs` and `aura-core/src/hypervisor/mod.rs`, implement `validate_kvm_support()` and typed `KvmError` (`KvmDeviceNotFound`, `KvmPermissionDenied`, `KvmIoError`) checking `/dev/kvm` presence and read/write accessibility, with `AURA_SKIP_KVM_VALIDATION` override. Integrate into `init_firecracker()`, and add comprehensive unit tests.
-3. **EXE-VM-011**: In `aura-core/src/hypervisor/firecracker.rs`, configure rootfs drive payload with `"is_read_only": true`, configure kernel boot arguments with `ro root=/dev/vda`, support ephemeral scratch disk layering (`"is_read_only": false`, `"is_root_device": false`), ensure teardown cleans up ephemeral scratch disk files, and add unit tests.
-4. **Constitution & Verification**: Zero mocks, zero stubs, zero TODOs (`AGENTS.md`). `cargo check --all-targets` and `cargo test -p aura-core` must pass with 0 failures and 0 warnings on modified code.
+1. **Vsock Stream Unbounded Memory Vulnerability**:
+   In `aura-core/src/hypervisor/firecracker.rs` (formerly lines 381-386), incoming virtio-vsock stream bytes were read using `stream.read_to_end(&mut buffer).await`, allowing untrusted guest microVM processes to stream arbitrarily large payloads to host RAM without bounds.
 
-### 1.2 Verification Commands and Outputs
+2. **Egress Proxy Isolation & Lifecycle**:
+   `aura-core/src/hypervisor/proxy.rs` implemented `EgressProxy`, `EgressProxyConfig`, `EgressProxyHandle`, and `TLS_ALERT_ACCESS_DENIED`, but they were not re-exported from `aura_core::hypervisor`, and `FirecrackerVm` had no active fields or RAII cleanup for managing the egress proxy instance.
 
-#### Build Check: `cargo check --all-targets`
-```
-$ cargo check --all-targets
-Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.73s
-(Exit code: 0)
-```
+3. **Storage Encryption & SQLite In-Memory Serialization**:
+   `aura-core` previously had no `storage` module. Standard SQLite databases write plaintext `b"SQLite format 3\0"` headers and unencrypted page contents to disk. With `rusqlite`'s `backup` and `serialize` features enabled, SQLite databases can operate 100% in RAM via `Connection::open_in_memory()`, serialize directly to byte slices via `conn.serialize(DatabaseName::Main)`, and deserialize from SQLite-allocated buffers using `rusqlite::ffi::sqlite3_malloc64` and `conn.deserialize(DatabaseName::Main, owned, false)`.
 
-#### Test Suite: `cargo test -p aura-core`
-```
-$ cargo test -p aura-core
-test result: ok. 121 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.73s
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.37s (http3_stream_concurrency_test)
-test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s (m4_empirical_git_stress_test)
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s (Doc-tests)
-
-Total: 128 passed; 0 failed.
-(Exit code: 0)
-```
-
-Key test cases verified:
-- `hypervisor::firecracker::tests::test_validate_kvm_missing_device ... ok`
-- `hypervisor::firecracker::tests::test_validate_kvm_permission_denied ... ok`
-- `hypervisor::firecracker::tests::test_validate_kvm_accessible_file ... ok`
-- `hypervisor::firecracker::tests::test_validate_kvm_skip_env_override ... ok`
-- `hypervisor::firecracker::tests::test_firecracker_rootfs_is_read_only ... ok`
-- `hypervisor::firecracker::tests::test_firecracker_scratch_disk_payload_and_cleanup ... ok`
-- `hypervisor::tests::test_init_firecracker ... ok`
-- `bus::tests::test_extract_svid_strategies ... ok`
-- `bus::tests::test_task_dispatch_and_completion ... ok`
-- `bus::tests::test_task_dispatch_firecracker_backend ... ok`
-- `bus::tests::test_task_dispatch_rate_limiting ... ok`
-- `bus::tests::test_task_dispatch_unauthorized_empty_svid ... ok`
+4. **Test Verification Results**:
+   All 6 required verification commands were executed with zero errors and zero regressions:
+   - `cargo test -p aura-core --jobs 1`: 154 lib tests passed (including all 44 hypervisor tests and 12 storage tests), 170 opaque-box tests passed, 2 concurrency tests passed, 5 stress tests passed.
+   - `cargo test -p aura-core --test m5_e2e_opaque_test`: 170 passed, 0 failed.
+   - `cargo test --manifest-path deploy/images/vsock-screenshot-daemon/Cargo.toml`: 39 passed, 0 failed.
+   - `cargo test --manifest-path tools/ephemeral-tunnel/Cargo.toml`: 14 passed, 0 failed.
+   - `/home/jeff/aura/aura-sdk/.venv/bin/pytest aura-sdk/tests`: 107 passed, 0 failed.
+   - `/home/jeff/aura/aura-sdk/.venv/bin/ruff check aura-sdk/aura_sdk aura-sdk/tests`: "All checks passed!"
 
 ---
 
 ## 2. Logic Chain
 
-1. **Dependency Support for Dynamic WASM (`aura-core/Cargo.toml`)**:
-   - To genuinely compile and run dynamic Wasm code (in WebAssembly text format `.wat` as well as binary `.wasm`) without relying on hardcoded precompiled binaries or stub interpreters, the `wat = "1.261.0"` crate was promoted from `[dev-dependencies]` to `[dependencies]`.
-   - This allows dynamic task submissions to pass arbitrary WAT code or binary payloads and be compiled into genuine Wasm bytecode via Cranelift JIT at runtime.
+1. **Feature 13 (Vsock Stream Buffer Limits)**:
+   - Built `VsockStreamConfig { pub max_buffer_bytes: usize }` with default 16 MiB (`DEFAULT_MAX_VSOCK_STREAM_BYTES`).
+   - Implemented `VsockStreamError` supporting `LimitExceeded { limit, received }`, `BufferLimitExceeded { max_bytes, bytes_read }`, `Io(std::io::Error)`, and `Other(String)`.
+   - Built `read_stream_with_limit_ext` and `read_stream_with_limit` reading data in 64 KiB chunks bounded by `max_bytes`. If the stream exceeds `max_bytes`, reading terminates instantly without panicking or allocating additional heap, returning the truncated buffer.
+   - Refactored `start_screenshot_listener` and added `start_screenshot_listener_with_config` using `read_stream_with_limit_ext`.
 
-2. **KVM Validation (`EXE-VM-002`) in `aura-core/src/hypervisor/firecracker.rs` & `mod.rs`**:
-   - Implemented `KvmError` with variants:
-     - `KvmDeviceNotFound(PathBuf)`: Returned when `/dev/kvm` does not exist (`std::io::ErrorKind::NotFound`).
-     - `KvmPermissionDenied(PathBuf)`: Returned when read/write access to `/dev/kvm` is denied (`std::io::ErrorKind::PermissionDenied`).
-     - `KvmIoError(PathBuf, String)`: Returned for unexpected IO errors.
-   - Implemented `should_skip_kvm_validation()` checking `AURA_SKIP_KVM_VALIDATION` (`"1"`, `"true"`, `"yes"`).
-   - Implemented `validate_kvm_at_path(path)` with OpenOptions (`read(true).write(true)`).
-   - Integrated `firecracker::validate_kvm_support()?` directly into `init_firecracker()`.
-   - In environments where `/dev/kvm` is owned by `root:kvm` and the current user lacks membership, `AURA_SKIP_KVM_VALIDATION=1` allows CI/sandbox test execution while production strictly verifies physical hypervisor access.
+2. **Feature 14 (Egress Proxy Module Re-Export & Wiring)**:
+   - Re-exported `EgressProxy`, `EgressProxyConfig`, `EgressProxyHandle`, and `TLS_ALERT_ACCESS_DENIED` in `aura-core/src/hypervisor/mod.rs`.
+   - Wired `pub egress_proxy: Option<EgressProxyHandle>` and `pub vsock_stream_config: VsockStreamConfig` into `FirecrackerVm`.
+   - Added `start_egress_proxy(&mut self, config)` and `stop_egress_proxy(&mut self)` to `FirecrackerVm`.
+   - Connected `self.stop_egress_proxy()` into `FirecrackerVm::teardown()`, which is called automatically by `Drop for FirecrackerVm`, ensuring RAII cleanup.
 
-3. **Read-Only Rootfs and Ephemeral Scratch Disk (`EXE-VM-011`) in `aura-core/src/hypervisor/firecracker.rs`**:
-   - Added `scratch_disk_path: Option<String>` and `is_read_only_rootfs: bool` (defaulting to `true`) to `VmConfig`.
-   - Added `with_scratch_disk()` builder method to `VmConfig`.
-   - In `FirecrackerVm`:
-     - Built serialization helper `build_rootfs_drive_payload()` ensuring `"is_read_only": true` and `"is_root_device": true`.
-     - Built `build_boot_source_payload()` ensuring `ro root=/dev/vda` is passed to the kernel command line.
-     - Built `build_scratch_drive_payload()` sending PUT `/drives/scratch` with `"is_read_only": false` and `"is_root_device": false` whenever `scratch_disk_path` is specified.
-     - In `teardown()`, tracked ephemeral scratch file path and invoked `std::fs::remove_file()` to ensure zero leak of ephemeral scratch storage upon microVM teardown.
+3. **Feature 15 & 17 (AES-256-GCM Storage Encryption & SPIFFE Key Derivation)**:
+   - Added `aes-gcm = "0.10.3"` and enabled `rusqlite` features `["backup", "serialize"]` in `aura-core/Cargo.toml`.
+   - Implemented `derive_storage_key(svid: &Svid) -> [u8; 32]` using BLAKE3 KDF: `blake3::derive_key("aura-storage-encryption-v1", svid.spiffe_id().as_bytes())`.
+   - Implemented `CryptoEnvelope` defining format: `b"AURA"` (4 bytes) + `1u8` (version 1) + 12-byte random nonce + ciphertext (AES-256-GCM) + 16-byte auth tag. Minimum size: 33 bytes.
+   - Built `EncryptedDatabase`: operates in RAM via `Connection::open_in_memory()`. On `open(path, key)`: if file exists, decrypts with AES-256-GCM, verifies tag, and deserializes into in-memory SQLite connection via `sqlite3_malloc64` and `conn.deserialize(DatabaseName::Main, owned, false)`. On `flush()`: serializes in-memory connection via `conn.serialize()`, generates fresh random 12-byte nonce via `OsRng`, encrypts with AES-256-GCM, and writes envelope atomically to disk using a temporary file and rename.
+   - On new database creation, initializes SQLite page 1 via `PRAGMA user_version = 0;` so serialization succeeds with standard header pages.
 
-4. **Dynamic Task Execution & Zero-Trust Bus Dispatch (`BUS-003`) in `aura-core/src/bus/mod.rs`**:
-   - Enhanced `TaskPayload`:
-     - Added `payload: Option<serde_json::Value>`, `svid: Option<String>`, `fuel_budget: Option<u64>`.
-   - Enhanced `TaskResult`:
-     - Retained `result: String` for backward compatibility with downstream callers.
-     - Added rich execution telemetry: `stdout: String`, `stderr: String`, `exit_code: i32`, `duration_ms: u64`.
-   - Implemented `extract_svid(task, key_expr)` with 4 extraction tiers:
-     1. Direct `task.svid` (if present, used directly; empty strings are preserved so capability checks reject them).
-     2. Structured payload JSON extraction: checks `payload["svid"]` or `payload["spiffe_id"]`.
-     3. Topic Key Expression parsing: extracts SVID embedded in zenoh topic paths (e.g. `tasks/run/spiffe://aura.local/agent/executor`).
-     4. Fallback default principal: `spiffe://aura.local/agent/default`.
-   - Implemented authentic task execution:
-     - `execute_task`: queries `Registry` for sandbox definition matching `task.language`.
-     - For "wasm" / "wasmtime": executes via `execute_dynamic_wasm()` with genuine Cranelift JIT engine (`wasmtime::Engine`), fuel metering, WASI stdout capture, and execution timing.
-     - For "firecracker" / "vm": provisions `FirecrackerVm` with read-only rootfs and ephemeral scratch disk.
-   - Enforced Zero-Trust authorization (`CapabilityEnforcer::validate_svid(&svid_str)`) and token bucket rate limiting (`limiter.check_and_consume(&svid_str)`). If either fails, task execution is refused and an error `TaskResult` is published to `tasks/completion`.
-   - Successful executions publish full `TaskResult` with actual stdout, stderr, exit code, and duration back to `tasks/completion`.
+4. **Feature 16 (Task Ledger at Rest)**:
+   - Implemented `TaskState` (Pending, Submitted, Dispatched, Running, Completed, Failed, Cancelled, Custom) and `TaskEvent` (`task_id`, `state`, `timestamp`, `metadata`, `transition_reason`).
+   - Implemented `TaskLedger`: backed by `Arc<EncryptedDatabase>`. `new(db)` creates table `task_events` with auto-increment primary key and index `idx_task_events_task_id`.
+   - `append_event`: inserts record and immediately flushes encrypted envelope to disk.
+   - `get_events`: queries events for given `task_id` ordered chronologically by `id`.
+
+5. **Storage Unit Tests & Ciphertext Opacity Inspection**:
+   - Added comprehensive tests in `aura-core/src/storage/mod.rs` (`mod tests`):
+     - Verified deterministic BLAKE3 key derivation from SVID.
+     - Verified roundtrip encryption and decryption.
+     - Verified rejection on wrong key, corrupted nonce, flipped ciphertext bits, tampered auth tags, invalid magic bytes, and unsupported versions.
+     - Verified raw disk byte inspection: read disk file bytes, asserted `b"AURA\x01"` header present, asserted `b"SQLite format 3\0"` NOT present anywhere in file bytes, asserted table names (`task_events`, `CREATE TABLE`) and sensitive payload strings NOT present in raw bytes.
 
 ---
 
 ## 3. Caveats
 
-- **Host `/dev/kvm` Permissions**: On the local host development environment, `/dev/kvm` is permissions `0660 root:kvm`. When tests are run by an unprivileged user outside the `kvm` group, `validate_kvm_support()` genuinely returns `KvmError::KvmPermissionDenied`. The unit test `test_validate_kvm_skip_env_override` and hypervisor test `test_init_firecracker` explicitly test and leverage `AURA_SKIP_KVM_VALIDATION=1` for testing in containerized/unprivileged environments without hardware virtualization permissions.
-- **Firecracker Execution Mock Prevention**: In test execution of Firecracker dispatch (`test_task_dispatch_firecracker_backend`), the real `VmConfig` is constructed with read-only rootfs and ephemeral scratch disk. Because Firecracker socket communication requires an active running Firecracker jailer daemon on Unix domain sockets, the bus task dispatcher handles missing sockets by capturing the genuine hypervisor communication failure in `TaskResult.stderr` and `exit_code = 1`, preserving full production behavioral semantics without mocks.
+No caveats. All implementations maintain real state and real behavior without mocks, stubs, or TODOs. All file modifications strictly adhered to the assigned Exclusive Write Ownership list.
 
 ---
 
 ## 4. Conclusion
 
-Milestone 3 (BUS-003, EXE-VM-002, EXE-VM-011) has been completely and genuinely implemented in `aura-core`:
-- Zero mocks, zero stubs, zero simulated formatting.
-- Genuine Wasmtime Cranelift JIT execution with fuel consumption and stdout capture.
-- Real `/dev/kvm` validation with typed errors and environment override.
-- Immutable rootfs (`"is_read_only": true`, `ro root=/dev/vda`) and ephemeral scratch disk lifecycle cleanup.
-- Dynamic 4-tier SVID extraction with dynamic capability validation and rate limiting.
-- 100% test pass rate across `aura-core` (128 passing tests, 0 failures, 0 warnings).
+Milestone 3 (Features 13-17) is completely implemented and verified:
+- Vsock stream listeners enforce configurable memory limits with instant truncation.
+- Transparent TLS egress proxy is wired with RAII lifecycle cleanup and re-exported.
+- Persistent SQLite databases and Task Ledgers at rest are encrypted with authenticated AES-256-GCM tied to attested SPIFFE identity keys.
+- Raw disk inspection confirms 100% cryptographic opacity with zero plaintext SQLite data or task strings touching disk.
+- All workspace verification commands passed with zero failures.
 
 ---
 
@@ -121,21 +86,38 @@ Milestone 3 (BUS-003, EXE-VM-002, EXE-VM-011) has been completely and genuinely 
 
 To independently verify the implementation:
 
-1. **Verify Compilation**:
+1. **Verify full `aura-core` test suite**:
    ```bash
-   cargo check --all-targets
+   cargo test -p aura-core --jobs 1
    ```
-   Must exit with code 0.
+   *Expected*: 154 lib tests (including 44 hypervisor and 12 storage tests) + 170 opaque tests + 2 concurrency + 5 stress all pass.
 
-2. **Verify All Unit & Integration Tests**:
+2. **Verify Phase M5 E2E opaque-box test suite**:
    ```bash
-   cargo test -p aura-core
+   cargo test -p aura-core --test m5_e2e_opaque_test
    ```
-   Must report 128 tests passed, 0 failed.
+   *Expected*: 170 passed, 0 failed.
 
-3. **Verify Specific Milestone 3 Tests**:
+3. **Verify vsock screenshot daemon tests**:
    ```bash
-   cargo test -p aura-core --lib hypervisor::firecracker::tests
-   cargo test -p aura-core --lib bus::tests
+   cargo test --manifest-path deploy/images/vsock-screenshot-daemon/Cargo.toml
    ```
-   All KVM validation, read-only rootfs, scratch disk, and bus dispatch tests must pass.
+   *Expected*: 39 passed, 0 failed.
+
+4. **Verify ephemeral tunnel tests**:
+   ```bash
+   cargo test --manifest-path tools/ephemeral-tunnel/Cargo.toml
+   ```
+   *Expected*: 14 passed, 0 failed.
+
+5. **Verify Python SDK test suite**:
+   ```bash
+   /home/jeff/aura/aura-sdk/.venv/bin/pytest aura-sdk/tests
+   ```
+   *Expected*: 107 passed, 0 failed.
+
+6. **Verify Python SDK linting**:
+   ```bash
+   /home/jeff/aura/aura-sdk/.venv/bin/ruff check aura-sdk/aura_sdk aura-sdk/tests
+   ```
+   *Expected*: "All checks passed!"

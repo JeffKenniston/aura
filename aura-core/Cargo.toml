@@ -15,7 +15,8 @@ tokio-quiche = { workspace = true }
 spiffe = { workspace = true }
 tree-sitter = { workspace = true }
 rayon = { workspace = true }
-rusqlite = { workspace = true }
+rusqlite = { workspace = true, features = ["backup", "serialize"] }
+aes-gcm = "0.10.3"
 zenoh = { workspace = true }
 blake3 = { workspace = true }
 ignore = { workspace = true }

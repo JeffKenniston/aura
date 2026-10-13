@@ -1,4 +1,5 @@
 use aura_core::hypervisor::firecracker::VmConfig;
+use aura_core::identity::Svid;
 use aura_core::knowledge::git::{GitManager, CONFLICT_DETECTED};
 use std::fs;
 use std::path::PathBuf;
@@ -225,6 +226,9 @@ fn test_stress_multithreaded_concurrent_git_operations() {
         let files_clone = files.clone();
 
         let handle = thread::spawn(move || {
+            let caller_svid = Svid::new("spiffe://aura.local/agent/git")
+                .with_scopes(vec!["github".to_string(), "tool:ephemeral-tunnel".to_string()]);
+
             for i in 0..iterations_per_thread {
                 match (t + i) % 4 {
                     0 => {
@@ -239,7 +243,7 @@ fn test_stress_multithreaded_concurrent_git_operations() {
                     2 => {
                         // Open PR
                         let title = format!("thread-{}-pr-{}", t, i);
-                        let res = git_clone.open_pr(&title, "Automated concurrent PR");
+                        let res = git_clone.open_pr(&caller_svid, &title, "Automated concurrent PR");
                         assert!(res.is_ok(), "PR creation should succeed");
                     }
                     3 => {

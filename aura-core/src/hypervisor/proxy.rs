@@ -420,11 +420,11 @@ impl EgressProxy {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     /// Constructs a valid synthetic TLS ClientHello packet with the specified SNI.
-    fn create_test_client_hello(server_name: &str) -> Vec<u8> {
+    pub(crate) fn create_test_client_hello(server_name: &str) -> Vec<u8> {
         let name_bytes = server_name.as_bytes();
         let name_len = name_bytes.len() as u16;
         let list_len = (1 + 2 + name_len) as u16;
