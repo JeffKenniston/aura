@@ -47,3 +47,10 @@ wat = "1.261.0"
 tempfile = "3.10"
 serial_test = "4.0.1"
 socket2 = "0.5"
+
+[dev-dependencies.criterion]
+version = "0.5"
+
+[[bench]]
+name = "identity_bench"
+harness = false
