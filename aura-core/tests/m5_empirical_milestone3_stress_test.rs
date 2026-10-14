@@ -9,13 +9,12 @@
 //! 3. Feature 13: Vsock stream memory buffer limits and instant truncation without panic.
 
 use std::collections::{HashMap, HashSet};
-use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::tempdir;
 
 use aura_core::hypervisor::firecracker::{
-    read_stream_with_limit, read_stream_with_limit_ext, FirecrackerVm, VsockStreamConfig,
+    read_stream_with_limit_ext, FirecrackerVm, VsockStreamConfig,
 };
 use aura_core::hypervisor::proxy::{
     EgressProxy, EgressProxyConfig, TLS_ALERT_ACCESS_DENIED,
@@ -344,7 +343,7 @@ fn test_empirical_encrypted_database_100_generation_persistence_cycle() {
     // Reopen and assert all 100 records survived with complete fidelity
     let db = EncryptedDatabase::open(&db_path, key).unwrap();
     let count: i64 = db
-        .query_row("SELECT COUNT(*) FROM generations", &[], |r| r.get(0))
+        .query_row("SELECT COUNT(*) FROM generations", [], |r| r.get(0))
         .unwrap();
     assert_eq!(count, 100, "All 100 generations must persist");
 

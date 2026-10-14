@@ -102,3 +102,7 @@ Desktop.ini
 *.rej
 .project
 .settings/
+
+# Additional Ephemeral Traces
+.aura/traces/
+.agents/teamwork/

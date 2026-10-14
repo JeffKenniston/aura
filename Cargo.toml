@@ -1,9 +1,12 @@
 [workspace]
 members = [
-    "aura-core"
-]
-exclude = [
-    "tools"
+    "aura-core",
+    "aura-cli",
+    "tools/filesystem",
+    "tools/ast-blast-radius",
+    "tools/ephemeral-tunnel",
+    "deploy/images/vsock-screenshot-daemon",
+    "deploy/images/vsock-shell-daemon"
 ]
 resolver = "2"
 
@@ -28,7 +31,13 @@ blake3 = "1.5"
 ignore = "0.4"
 toml = "0.8"
 serde_yaml = "0.9"
-
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+tracing = "0.1.40"
+anyhow = "1.0.86"
+thiserror = "1.0.63"
+wit-bindgen = "0.36"
+uuid = { version = "1.10", features = ["v4"] }
 
 [profile.test]
 debug = 0

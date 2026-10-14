@@ -20,7 +20,7 @@ pub fn init_global_service(service: EphemeralTunnelService) -> Result<(), Epheme
 
 // Generate WIT bindings for the aura:tunnel WebAssembly component
 wit_bindgen::generate!({
-    path: "wit",
+    path: "../../aura/runtimes/wasm/wit/aura-tunnel.wit",
     world: "tunnel",
 });
 
