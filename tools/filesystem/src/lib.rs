@@ -8,7 +8,7 @@ pub use service::FileSystemService;
 
 // Generate WIT bindings for the aura:fs WebAssembly component
 wit_bindgen::generate!({
-    path: "wit",
+    path: "../../aura/runtimes/wasm/wit/aura-fs.wit",
     world: "filesystem",
 });
 

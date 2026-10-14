@@ -20,18 +20,15 @@
 //!    - Heavy 256KB JSON metadata persistence and opacity validation
 
 use aura_core::hypervisor::firecracker::{
-    read_stream_with_limit, read_stream_with_limit_ext, VsockStreamConfig, VsockStreamError,
-    DEFAULT_MAX_VSOCK_STREAM_BYTES,
+    read_stream_with_limit, read_stream_with_limit_ext,
 };
 use aura_core::identity::Svid;
 use aura_core::storage::{
-    derive_storage_key, derive_storage_key_with_context, CryptoEnvelope, EncryptedDatabase,
+    derive_storage_key, derive_storage_key_with_context, EncryptedDatabase,
     StorageError, TaskEvent, TaskLedger, TaskState, ENCRYPTED_MAGIC, ENCRYPTED_VERSION,
-    MIN_ENVELOPE_LEN, NONCE_LEN, TAG_LEN,
+    MIN_ENVELOPE_LEN, TAG_LEN,
 };
-use std::collections::HashMap;
 use std::io::Cursor;
-use std::path::Path;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tempfile::tempdir;

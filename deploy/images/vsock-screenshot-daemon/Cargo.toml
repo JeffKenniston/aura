@@ -6,7 +6,6 @@ authors = ["Jeff Kenniston"]
 license = "Apache-2.0"
 description = "Lightweight X11 screenshot daemon piping PNG frames over AF_VSOCK to host"
 
-[workspace]
 
 [dependencies]
 x11rb = { version = "0.14", features = ["xtest"] }

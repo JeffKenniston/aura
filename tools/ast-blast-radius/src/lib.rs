@@ -15,7 +15,7 @@ pub use types::{RiskReport, SymbolInfo};
 
 // Generate WIT bindings for the aura:graph WebAssembly component
 wit_bindgen::generate!({
-    path: "wit",
+    path: "../../aura/runtimes/wasm/wit/aura-graph.wit",
     world: "blast-radius",
 });
 

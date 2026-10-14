@@ -6,7 +6,6 @@ authors = ["Jeff Kenniston"]
 license = "Apache-2.0"
 description = "Persistent in-guest shell daemon piping bash session state over AF_VSOCK (TOOL-BASH-002)"
 
-[workspace]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
