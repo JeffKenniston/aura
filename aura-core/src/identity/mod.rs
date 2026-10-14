@@ -417,25 +417,30 @@ impl CapabilityEnforcer {
         svid: &Svid,
         action_str: &str,
     ) -> Result<bool, Box<dyn std::error::Error>> {
-        let policy_source = r#"
-            permit(
-                principal,
-                action,
-                resource
-            ) when {
-                principal.is_trusted == true
-            };
-            
-            permit(
-                principal,
-                action,
-                resource
-            ) when {
-                principal.has_scope == true
-            };
-        "#;
+        // PERFORMANCE: Caches the Cedar PolicySet using LazyLock to eliminate repetitive
+        // AST parsing overhead on every authorization check.
+        // Complexity: Transitions initialization from O(N) (string parsing) per call to O(1) memory access,
+        // drastically reducing evaluation latency under high concurrency.
+        static POLICIES: std::sync::LazyLock<PolicySet> = std::sync::LazyLock::new(|| {
+            let policy_source = r#"
+                permit(
+                    principal,
+                    action,
+                    resource
+                ) when {
+                    principal.is_trusted == true
+                };
 
-        let policies = PolicySet::from_str(policy_source)?;
+                permit(
+                    principal,
+                    action,
+                    resource
+                ) when {
+                    principal.has_scope == true
+                };
+            "#;
+            PolicySet::from_str(policy_source).expect("Failed to parse Cedar policy source")
+        });
 
         let principal_uid = EntityUid::from_type_name_and_id(
             EntityTypeName::from_str("Agent")?,
@@ -478,7 +483,7 @@ impl CapabilityEnforcer {
         let entities = Entities::from_json_str(&entities_json, None)?;
 
         let authorizer = Authorizer::new();
-        let answer = authorizer.is_authorized(&req, &policies, &entities);
+        let answer = authorizer.is_authorized(&req, &POLICIES, &entities);
 
         Ok(answer.decision() == Decision::Allow)
     }

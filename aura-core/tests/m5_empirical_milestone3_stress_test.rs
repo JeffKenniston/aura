@@ -344,7 +344,7 @@ fn test_empirical_encrypted_database_100_generation_persistence_cycle() {
     // Reopen and assert all 100 records survived with complete fidelity
     let db = EncryptedDatabase::open(&db_path, key).unwrap();
     let count: i64 = db
-        .query_row("SELECT COUNT(*) FROM generations", &[], |r| r.get(0))
+        .query_row("SELECT COUNT(*) FROM generations", [], |r| r.get(0))
         .unwrap();
     assert_eq!(count, 100, "All 100 generations must persist");
 
