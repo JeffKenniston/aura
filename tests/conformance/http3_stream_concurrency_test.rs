@@ -17,8 +17,8 @@
 //!    (Min, P50, P90, P99, Max), peak memory usage (RSS via /proc/self/status), and verifies 0 packet
 //!    loss and 0 stream resets via native Quiche telemetry counters.
 
-use aura_core::config::TransportConfig;
-use aura_core::transport::Http3Transport;
+use aura_host::config::TransportConfig;
+use aura_host::transport::Http3Transport;
 use quiche;
 use std::collections::HashMap;
 use std::io::Write;
