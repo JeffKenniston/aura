@@ -9,6 +9,7 @@ license.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+aura-iam = { path = "../../aura/iam" }
 wit-bindgen = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

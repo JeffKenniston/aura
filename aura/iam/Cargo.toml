@@ -1,0 +1,21 @@
+[package]
+name = "aura-iam"
+version = "0.1.0"
+edition = "2021"
+authors = ["Jeff Kenniston"]
+license = "Apache-2.0"
+description = "Aura Identity and Access Management"
+
+[dependencies]
+spiffe = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+cedar-policy = { workspace = true }
+dashmap = { workspace = true }
+
+[dev-dependencies]
+serial_test = "3"
