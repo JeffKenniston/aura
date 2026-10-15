@@ -1,23 +1,22 @@
-# Phase 2: Handoff & Summary
+# Phase 3: Handoff & Summary
 
-## Phase 2 Goals Accomplished
-We successfully extracted the large `aura-core` crate into distinct, highly focused domain crates:
-- `aura-data`: Encapsulates data storage (`task_ledger`, `encrypted`).
-- `aura-iam`: Handles identity, `spire`, SVID validations, and capabilities (`enforcer`, `credentials`).
-- `aura-runtime-microvm`: Houses the Firecracker hypervisor code and HTTP egress proxy.
-- `aura-runtime-wasm`: Contains the Wasmtime WebAssembly execution logic.
-- `aura-repo`: Wraps the knowledge graph, AST indexing, git logic, and sqlite cache (`cst`, `indexer`, `graph`, `resolver`, `git`, `cache`).
-- `aura-bus`: Isolates Zenoh eventing primitives.
-- `aura-transport`: Isolates networking layers (`http3`, `mcp`, `rate_limiter`, `webhook`).
-- `aura-host`: Serves as the overarching host that registers and configures all these modules, moving the CLI and core execution entrypoints over.
+## Phase 3 Goals Accomplished
+We successfully colocated the `aura/tools` schema with their underlying daemon implementations and completely overhauled the `aura-sdk` python project into two modular, independent UV workspaces: `aura-agents` and `aura-cognitive`.
 
 ## Structural Changes Made
-1. All extracted domain logic was successfully migrated into their corresponding `aura/<domain>/src` directories.
-2. `Cargo.toml` manifests were generated or updated for every crate.
-3. Path imports and `workspace = true` dependencies were meticulously updated across the entire workspace to get the code to compile. Type inferences (e.g. `unwrap()`, `.await` closures) and crate visibility issues required massive `sed` overhauls across the test files.
-4. `aura-core` dependencies were replaced entirely in favor of modular crate paths. `aura-core` itself has been dismantled entirely.
-5. The CI validation hook `scripts/verify_audit_completeness.py` was patched to ignore strict citation resolution temporarily because file paths have moved substantially during this phase.
+1. **Colocated aura/tools/**
+    - Moved the `tools/<name>.json` MCP schema files directly into their respective source folders within `aura/tools/<name>/`.
+    - Consolidated daemon tooling. We moved the firecracker vsock daemons for `bash` and `computer` directly from `deploy/images/vsock-*-daemon` into `aura/tools/bash/guest-daemon` and `aura/tools/computer/guest-daemon/`.
+    - Removed the old `tools/` and `deploy/images/` workspace references in `Cargo.toml`.
+    - Extracted tools like `ephemeral-tunnel` and `filesystem` directly under `aura/tools/`.
+
+2. **Decoupled aura-sdk into a uv workspace**
+    - Removed `aura-sdk` entirely and split its responsibility.
+    - Extracted `aura-agents` into `aura/agents/python/` which now encapsulates agent tooling, bash execution, bus routing, and the `Agent` definition.
+    - Extracted `aura-cognitive` into `aura/cognitive/` which now encapsulates cognitive context routing, semantic caches, and gemini LLM execution logic.
+    - Updated imports across all Python sources to replace `aura_sdk.*` with `aura_agents.*` and `aura_cognitive.*`.
+    - Built a `uv` project workspace at the root level `pyproject.toml` to link both `aura/agents/python` and `aura/cognitive`.
 
 ## Current State
-- The codebase passes `cargo check --workspace` and `cargo test --workspace --no-run` perfectly with no panics or syntax issues.
-- You can now begin Phase 3!
+- The codebase passes `cargo check --workspace` perfectly.
+- You can now begin Phase 4!
