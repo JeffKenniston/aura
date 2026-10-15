@@ -1,0 +1,15 @@
+[project]
+name = "aura-cognitive"
+version = "0.1.0"
+description = "Aura Cognitive Orchestration Substrate"
+authors = [{name = "Jeff Kenniston"}]
+requires-python = ">=3.11"
+dependencies = [
+    "google-genai>=2.28.0",
+    "pydantic>=2.10.0",
+    "httpx>=0.28.0"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

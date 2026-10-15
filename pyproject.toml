@@ -1,0 +1,18 @@
+[project]
+name = "aura-python-workspace"
+version = "0.1.0"
+description = "Aura Python Workspace"
+authors = [{name = "Jeff Kenniston"}]
+requires-python = ">=3.11"
+
+[workspace]
+members = ["aura/agents/python", "aura/cognitive"]
+
+[dependency-groups]
+dev = [
+    "google-genai>=2.31.0",
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "websockets<15.0",
+]

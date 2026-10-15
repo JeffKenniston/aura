@@ -10,11 +10,11 @@ members = [
     "aura/repo",
     "aura/host",
 
-    "tools/filesystem",
-    "tools/ast-blast-radius",
-    "tools/ephemeral-tunnel",
-    "deploy/images/vsock-screenshot-daemon",
-    "deploy/images/vsock-shell-daemon"
+    "aura/tools/filesystem",
+    "aura/tools/ast-blast-radius",
+    "aura/tools/ephemeral-tunnel",
+    "aura/tools/computer/guest-daemon",
+    "aura/tools/bash/guest-daemon"
 ]
 resolver = "2"
 
