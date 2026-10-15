@@ -1,0 +1,41 @@
+[package]
+name = "aura-repo"
+version = "0.1.0"
+edition = "2021"
+authors = ["Jeff Kenniston"]
+license = "Apache-2.0"
+description = "Aura Repository Knowledge Graph"
+
+[dependencies]
+aura-iam = { path = "../iam" }
+aura-data = { path = "../data" }
+aura-runtime-microvm = { path = "../runtimes/microvm" }
+rusqlite = { workspace = true, features = ["bundled"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tree-sitter = { workspace = true }
+tree-sitter-rust = "0.24.2"
+tree-sitter-python = "0.25.0"
+tree-sitter-javascript = "0.25.0"
+tree-sitter-typescript = "0.23.2"
+tree-sitter-go = "0.25.0"
+tree-sitter-c = "0.24.2"
+tree-sitter-cpp = "0.23.4"
+tree-sitter-java = "0.23.5"
+tree-sitter-c-sharp = "0.23.5"
+tree-sitter-ruby = "0.23.1"
+blake3 = { workspace = true }
+ignore = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+sqlite-vec = "0.1.6"
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+rayon = { workspace = true }
+regex = "1.10"
+zenoh = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.10"
+aura-transport = { path = "../transport" }

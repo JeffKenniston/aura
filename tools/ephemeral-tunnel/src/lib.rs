@@ -1,10 +1,8 @@
 use std::sync::OnceLock;
 
-pub mod credentials;
-pub mod spire;
 
-pub use credentials::{Credentials, TokenMetadata};
-pub use spire::EphemeralTunnelService;
+pub use aura_iam::credentials::{Credentials, TokenMetadata};
+pub use aura_iam::spire::EphemeralTunnelService;
 
 static GLOBAL_SERVICE: OnceLock<EphemeralTunnelService> = OnceLock::new();
 

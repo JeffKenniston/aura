@@ -52,10 +52,10 @@ A total of **121 requirements** spanning Phases M0 through M3 were comprehensive
 
 | Req ID | Requirement Name | Status | Primary Code Citation | Test Citation / Verification | Next Steps |
 |---|---|:---:|---|---|---|
-| **M0-SPIKE-01** | Cargo Workspace & Microkernel Layout | **Complete** | `/home/jeff/aura/Cargo.toml:1-33`<br>`/home/jeff/aura/aura-core/src/lib.rs:1-45` | `/home/jeff/aura/aura-core/src/lib.rs:51-64` (`test_microkernel_init`) | None. Multi-crate layout and centralized dependencies verified. |
+| **M0-SPIKE-01** | Cargo Workspace & Microkernel Layout | **Complete** | `/home/jeff/aura/Cargo.toml:1-33`<br>`/home/jeff/aura/aura/host/src/core.rs:1-45` | `/home/jeff/aura/aura/host/src/core.rs:51-64` (`test_microkernel_init`) | None. Multi-crate layout and centralized dependencies verified. |
 | **M0-SPIKE-02** | Isolated Python SDK Substrate | **Complete** | `/home/jeff/aura/aura-sdk/pyproject.toml:1-41`<br>`/home/jeff/aura/aura-sdk/aura_sdk/agent.py:1-40` | `/home/jeff/aura/aura-sdk/tests/test_bus_client.py:22-38` | None. Poetry packaging (`poetry.core.masonry.api`) and Pydantic schemas verified. |
-| **M0-SPIKE-03** | Asynchronous Tokio Runtime Pool | **Partial** | `/home/jeff/aura/aura-core/src/runtime/mod.rs:3-6`<br>`/home/jeff/aura/aura-core/src/lib.rs:21-22` | `/home/jeff/aura/aura-core/src/lib.rs:51-64` | **Next Steps**: Implement authentic `tokio::runtime::Builder::new_multi_thread()` in `runtime::init_tokio_pool()` to construct runtime with worker threads matching system parallelism, and bootstrap microkernel via `rt.block_on(init())` in executable runner. |
-| **M0-SPIKE-04** | Zenoh Event Bus Integration | **Complete** | `/home/jeff/aura/aura-core/src/bus/mod.rs:53-70`<br>`/home/jeff/aura/aura-sdk/aura_sdk/bus/client.py:154-173` | `/home/jeff/aura/aura-core/src/bus/mod.rs:295-319`<br>`/home/jeff/aura/aura-sdk/tests/test_transport.py:1-26` | None. Pub/sub and query communication verified. |
+| **M0-SPIKE-03** | Asynchronous Tokio Runtime Pool | **Partial** | `/home/jeff/aura/aura/host/src/runtime/mod.rs:3-6`<br>`/home/jeff/aura/aura/host/src/core.rs:21-22` | `/home/jeff/aura/aura/host/src/core.rs:51-64` | **Next Steps**: Implement authentic `tokio::runtime::Builder::new_multi_thread()` in `runtime::init_tokio_pool()` to construct runtime with worker threads matching system parallelism, and bootstrap microkernel via `rt.block_on(init())` in executable runner. |
+| **M0-SPIKE-04** | Zenoh Event Bus Integration | **Complete** | `/home/jeff/aura/aura/bus/src/lib.rs:53-70`<br>`/home/jeff/aura/aura-sdk/aura_sdk/bus/client.py:154-173` | `/home/jeff/aura/aura/bus/src/lib.rs:295-319`<br>`/home/jeff/aura/aura-sdk/tests/test_transport.py:1-26` | None. Pub/sub and query communication verified. |
 
 ---
 
@@ -65,57 +65,57 @@ A total of **121 requirements** spanning Phases M0 through M3 were comprehensive
 
 | Req ID | Requirement Name | Status | Primary Code Citation | Test Citation / Verification | Next Steps |
 |---|---|:---:|---|---|---|
-| **HOST-001** | Microkernel Language | **Complete** | `/home/jeff/aura/aura-core/src/lib.rs:1-66`<br>`/home/jeff/aura/aura-core/Cargo.toml:1-45` | `cargo test -p aura-core` (86 unit tests passing) | None. Pure Rust microkernel guarantees memory safety. |
-| **HOST-002** | Asynchronous Concurrency Runtime | **Partial** | `/home/jeff/aura/aura-core/src/runtime/mod.rs:3-6`<br>`/home/jeff/aura/aura-core/src/lib.rs:21-22` | `/home/jeff/aura/aura-core/src/lib.rs:51-64` | **Next Steps**: Replace facade `init_tokio_pool()` with concrete `tokio::runtime::Builder` instantiation; configure worker threads to match CPU cores without thread-blocking syscalls. |
-| **HOST-003** | In-Process Embedded WASM Engine | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/wasm.rs:13-33`<br>`/home/jeff/aura/aura-core/src/hypervisor/mod.rs:5-10` | `/home/jeff/aura/aura-core/src/hypervisor/mod.rs:28-32` (`test_init_wasmtime`) | None. In-process Cranelift JIT engine verified. |
-| **HOST-004** | High-Concurrency Stream Multiplexing Scale | **Partial** | `/home/jeff/aura/aura-core/src/transport/http3.rs:18-37`<br>`/home/jeff/aura/aura-core/src/config/mod.rs:211-225` | `/home/jeff/aura/aura-core/src/transport/http3.rs:126-142` (`test_quic_listener_binding`) | **Next Steps**: Update `TransportConfig.initial_max_streams_bidi` to 5,000 preset and implement automated load test harness verifying 5,000 concurrent bidirectional QUIC streams without thread starvation. |
-| **HOST-005** | Cross-Platform OS Portability | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:88-100`<br>`/home/jeff/aura/aura-core/src/supervisor/mod.rs:243-264` | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:509-536` | None. Dual Linux/WSL2 portability verified. |
-| **HOST-006** | Zero Foreign Function Interface (Zero-FFI) | **Complete** | `/home/jeff/aura/aura-core/src/bus/mod.rs:45-47`<br>`/home/jeff/aura/aura-sdk/aura_sdk/bus/client.py:126-127` | `/home/jeff/aura/aura-core/src/bus/mod.rs:295-319`<br>`/home/jeff/aura/aura-sdk/tests/test_bus_client.py:63-110` | None. Zero FFI bindings present in workspace. |
-| **HOST-007** | Child Process Supervision & Lifecycle | **Complete** | `/home/jeff/aura/aura-core/src/supervisor/mod.rs:121-171`<br>`/home/jeff/aura/aura-core/src/lib.rs:39-42` | `/home/jeff/aura/aura-core/src/supervisor/mod.rs:328-354` (`test_spawn_and_poll_child_process`) | None. Process polling and lifecycle verified. |
-| **HOST-008** | Declarative Microkernel Configuration | **Complete** | `/home/jeff/aura/aura-core/src/config/mod.rs:57-114`<br>`/home/jeff/aura/aura-core/src/lib.rs:16-20` | `/home/jeff/aura/aura-core/src/config/mod.rs:524-580` (TOML/YAML schema tests) | None. Strict schema validation verified. |
-| **HOST-009** | Administrative Drain & Graceful Shutdown | **Complete** | `/home/jeff/aura/aura-core/src/supervisor/mod.rs:173-264`<br>`/home/jeff/aura/aura-core/src/lib.rs:39-42` | `/home/jeff/aura/aura-core/src/supervisor/mod.rs:295-325` (`test_supervisor_drain_sequence`) | None. Signal trapping and in-flight stream drain verified. |
-| **HOST-010** | Memory Safety & Zero GC Overhead | **Complete** | `/home/jeff/aura/aura-core/src/lib.rs:1-45`<br>`/home/jeff/aura/aura-core/src/supervisor/mod.rs:51-115`<br>`/home/jeff/aura/aura-core/src/bus/mod.rs:45-123`<br>`/home/jeff/aura/aura-core/src/transport/http3.rs:13-86` | `cargo test -p aura-core` (91 unit and integration tests passing; verified by Rust borrow checker and RAII guards) | None. Memory ownership and lifetime invariants maintained. |
-| **HOST-011** | Hypervisor Substrate Backend Registry | **Partial** | `/home/jeff/aura/aura-core/src/runtime/registry.rs:16-78`<br>`/home/jeff/aura/aura-core/src/bus/mod.rs:225-288` | `/home/jeff/aura/aura-core/src/runtime/registry.rs:84-136` (`test_registry_resolve`) | **Next Steps**: Replace mock TOML parsing in `registry.rs:33-43` with genuine `toml` deserialization into typed backend structures, validating file existence for WASM binaries and VM rootfs images. |
-| **HOST-012** | In-Flight Task Accounting & Guard RAII | **Complete** | `/home/jeff/aura/aura-core/src/supervisor/mod.rs:51-61, 98-115` | `/home/jeff/aura/aura-core/src/supervisor/mod.rs:271-293` (`test_supervisor_state_and_task_registration`) | None. Atomic counter and RAII task guards verified. |
+| **HOST-001** | Microkernel Language | **Complete** | `/home/jeff/aura/aura/host/src/core.rs:1-66`<br>`/home/jeff/aura/aura-core/Cargo.toml:1-45` | `cargo test -p aura-core` (86 unit tests passing) | None. Pure Rust microkernel guarantees memory safety. |
+| **HOST-002** | Asynchronous Concurrency Runtime | **Partial** | `/home/jeff/aura/aura/host/src/runtime/mod.rs:3-6`<br>`/home/jeff/aura/aura/host/src/core.rs:21-22` | `/home/jeff/aura/aura/host/src/core.rs:51-64` | **Next Steps**: Replace facade `init_tokio_pool()` with concrete `tokio::runtime::Builder` instantiation; configure worker threads to match CPU cores without thread-blocking syscalls. |
+| **HOST-003** | In-Process Embedded WASM Engine | **Complete** | `/home/jeff/aura/aura/runtimes/wasm/src/lib.rs:13-33`<br>`/home/jeff/aura/aura-core/src/hypervisor/mod.rs:5-10` | `/home/jeff/aura/aura-core/src/hypervisor/mod.rs:28-32` (`test_init_wasmtime`) | None. In-process Cranelift JIT engine verified. |
+| **HOST-004** | High-Concurrency Stream Multiplexing Scale | **Partial** | `/home/jeff/aura/aura/transport/src/http3.rs:18-37`<br>`/home/jeff/aura/aura/host/src/config/mod.rs:211-225` | `/home/jeff/aura/aura/transport/src/http3.rs:126-142` (`test_quic_listener_binding`) | **Next Steps**: Update `TransportConfig.initial_max_streams_bidi` to 5,000 preset and implement automated load test harness verifying 5,000 concurrent bidirectional QUIC streams without thread starvation. |
+| **HOST-005** | Cross-Platform OS Portability | **Complete** | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:88-100`<br>`/home/jeff/aura/aura/host/src/supervisor/mod.rs:243-264` | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:509-536` | None. Dual Linux/WSL2 portability verified. |
+| **HOST-006** | Zero Foreign Function Interface (Zero-FFI) | **Complete** | `/home/jeff/aura/aura/bus/src/lib.rs:45-47`<br>`/home/jeff/aura/aura-sdk/aura_sdk/bus/client.py:126-127` | `/home/jeff/aura/aura/bus/src/lib.rs:295-319`<br>`/home/jeff/aura/aura-sdk/tests/test_bus_client.py:63-110` | None. Zero FFI bindings present in workspace. |
+| **HOST-007** | Child Process Supervision & Lifecycle | **Complete** | `/home/jeff/aura/aura/host/src/supervisor/mod.rs:121-171`<br>`/home/jeff/aura/aura/host/src/core.rs:39-42` | `/home/jeff/aura/aura/host/src/supervisor/mod.rs:328-354` (`test_spawn_and_poll_child_process`) | None. Process polling and lifecycle verified. |
+| **HOST-008** | Declarative Microkernel Configuration | **Complete** | `/home/jeff/aura/aura/host/src/config/mod.rs:57-114`<br>`/home/jeff/aura/aura/host/src/core.rs:16-20` | `/home/jeff/aura/aura/host/src/config/mod.rs:524-580` (TOML/YAML schema tests) | None. Strict schema validation verified. |
+| **HOST-009** | Administrative Drain & Graceful Shutdown | **Complete** | `/home/jeff/aura/aura/host/src/supervisor/mod.rs:173-264`<br>`/home/jeff/aura/aura/host/src/core.rs:39-42` | `/home/jeff/aura/aura/host/src/supervisor/mod.rs:295-325` (`test_supervisor_drain_sequence`) | None. Signal trapping and in-flight stream drain verified. |
+| **HOST-010** | Memory Safety & Zero GC Overhead | **Complete** | `/home/jeff/aura/aura/host/src/core.rs:1-45`<br>`/home/jeff/aura/aura/host/src/supervisor/mod.rs:51-115`<br>`/home/jeff/aura/aura/bus/src/lib.rs:45-123`<br>`/home/jeff/aura/aura/transport/src/http3.rs:13-86` | `cargo test -p aura-core` (91 unit and integration tests passing; verified by Rust borrow checker and RAII guards) | None. Memory ownership and lifetime invariants maintained. |
+| **HOST-011** | Hypervisor Substrate Backend Registry | **Partial** | `/home/jeff/aura/aura/host/src/runtime/registry.rs:16-78`<br>`/home/jeff/aura/aura/bus/src/lib.rs:225-288` | `/home/jeff/aura/aura/host/src/runtime/registry.rs:84-136` (`test_registry_resolve`) | **Next Steps**: Replace mock TOML parsing in `registry.rs:33-43` with genuine `toml` deserialization into typed backend structures, validating file existence for WASM binaries and VM rootfs images. |
+| **HOST-012** | In-Flight Task Accounting & Guard RAII | **Complete** | `/home/jeff/aura/aura/host/src/supervisor/mod.rs:51-61, 98-115` | `/home/jeff/aura/aura/host/src/supervisor/mod.rs:271-293` (`test_supervisor_state_and_task_registration`) | None. Atomic counter and RAII task guards verified. |
 
 #### BUS Domain (Zenoh Event Bus & Routing Primitives)
 
 | Req ID | Requirement Name | Status | Primary Code Citation | Test Citation / Verification | Next Steps |
 |---|---|:---:|---|---|---|
-| **BUS-001** | Scoped Pub/Sub Messaging | **Complete** | `/home/jeff/aura/aura-core/src/bus/mod.rs:92-123`<br>`/home/jeff/aura/aura-sdk/aura_sdk/bus/client.py:234-244` | `/home/jeff/aura/aura-core/src/bus/mod.rs:295-319` (`test_zenoh_bus_pub_sub`) | None. Tenant/workspace scoped pub/sub verified. |
-| **BUS-002** | SPIFFE SVID Topic Scoping Boundary | **Complete** | `/home/jeff/aura/aura-core/src/bus/mod.rs:61-69, 83-89`<br>`/home/jeff/aura/aura-sdk/aura_sdk/bus/client.py:133-134` | `/home/jeff/aura/aura-sdk/tests/test_bus_client.py:22-38` | None. Key expression SVID prefixing verified. |
-| **BUS-003** | Read-Switch-Execute-Return Task Dispatch | **Partial** | `/home/jeff/aura/aura-core/src/bus/mod.rs:125-167`<br>`/home/jeff/aura/aura-sdk/aura_sdk/bus/client.py:260-295` | `/home/jeff/aura/aura-core/src/bus/mod.rs:322-353` (`test_task_dispatch_and_completion`) | **Next Steps**: Replace simulated string formatting in `start_task_listener` (lines 145-149) with genuine execution invocation via `WasmRuntime` (WASM) and `FirecrackerVm` vsock channels (microVM), and replace mock SPIFFE tokens in `start_router`. |
+| **BUS-001** | Scoped Pub/Sub Messaging | **Complete** | `/home/jeff/aura/aura/bus/src/lib.rs:92-123`<br>`/home/jeff/aura/aura-sdk/aura_sdk/bus/client.py:234-244` | `/home/jeff/aura/aura/bus/src/lib.rs:295-319` (`test_zenoh_bus_pub_sub`) | None. Tenant/workspace scoped pub/sub verified. |
+| **BUS-002** | SPIFFE SVID Topic Scoping Boundary | **Complete** | `/home/jeff/aura/aura/bus/src/lib.rs:61-69, 83-89`<br>`/home/jeff/aura/aura-sdk/aura_sdk/bus/client.py:133-134` | `/home/jeff/aura/aura-sdk/tests/test_bus_client.py:22-38` | None. Key expression SVID prefixing verified. |
+| **BUS-003** | Read-Switch-Execute-Return Task Dispatch | **Partial** | `/home/jeff/aura/aura/bus/src/lib.rs:125-167`<br>`/home/jeff/aura/aura-sdk/aura_sdk/bus/client.py:260-295` | `/home/jeff/aura/aura/bus/src/lib.rs:322-353` (`test_task_dispatch_and_completion`) | **Next Steps**: Replace simulated string formatting in `start_task_listener` (lines 145-149) with genuine execution invocation via `WasmRuntime` (WASM) and `FirecrackerVm` vsock channels (microVM), and replace mock SPIFFE tokens in `start_router`. |
 | **BUS-004** | Standard Message Envelope Schema | **Complete** | `/home/jeff/aura/aura-sdk/aura_sdk/bus/client.py:72-121, 245-258` | `/home/jeff/aura/aura-sdk/tests/test_bus_client.py:40-60` (`test_bus_message_envelope`) | None. Envelope serialization/deserialization verified. |
-| **BUS-005** | Topology: Router and Leaf Nodes | **Complete** | `/home/jeff/aura/aura-core/src/bus/mod.rs:45-70`<br>`/home/jeff/aura/aura-sdk/aura_sdk/bus/client.py:126-165` | `/home/jeff/aura/aura-core/src/bus/mod.rs:295-319` | None. Central microkernel router topology verified. |
-| **BUS-006** | Key-Expression ACLs & Security Boundaries | **Complete** | `/home/jeff/aura/aura-core/src/bus/mod.rs:61-69, 258-265`<br>`/home/jeff/aura/aura-sdk/aura_sdk/bus/client.py:133-134` | `/home/jeff/aura/aura-sdk/tests/test_bus_client.py:22-38` | None. Cross-tenant topic access denial verified. |
+| **BUS-005** | Topology: Router and Leaf Nodes | **Complete** | `/home/jeff/aura/aura/bus/src/lib.rs:45-70`<br>`/home/jeff/aura/aura-sdk/aura_sdk/bus/client.py:126-165` | `/home/jeff/aura/aura/bus/src/lib.rs:295-319` | None. Central microkernel router topology verified. |
+| **BUS-006** | Key-Expression ACLs & Security Boundaries | **Complete** | `/home/jeff/aura/aura/bus/src/lib.rs:61-69, 258-265`<br>`/home/jeff/aura/aura-sdk/aura_sdk/bus/client.py:133-134` | `/home/jeff/aura/aura-sdk/tests/test_bus_client.py:22-38` | None. Cross-tenant topic access denial verified. |
 | **BUS-007** | At-Least-Once Delivery & Consumer Idempotency | **Complete** | `/home/jeff/aura/aura-sdk/aura_sdk/bus/client.py:143-146, 174-186` | `/home/jeff/aura/aura-sdk/tests/test_bus_client.py:113-124` (`test_consumer_idempotency`) | None. Bounded correlation cache verified. |
-| **BUS-008** | Token Bucket Event Bus Backpressure | **Complete** | `/home/jeff/aura/aura-core/src/transport/rate_limiter.rs:13-64`<br>`/home/jeff/aura/aura-core/src/bus/mod.rs:224-253` | `/home/jeff/aura/aura-core/src/bus/rate_limiter.rs:5-19` (`test_rate_limiter`) | None. Burst rejection and rate limiting verified. |
-| **BUS-009** | Per-Identity In-Memory Rate Limiting Guard | **Complete** | `/home/jeff/aura/aura-core/src/bus/mod.rs:245-253`<br>`/home/jeff/aura/aura-core/src/transport/rate_limiter.rs:33-58` | `/home/jeff/aura/aura-core/src/bus/rate_limiter.rs:9-18` | None. Per-SVID burst throttle verified. |
+| **BUS-008** | Token Bucket Event Bus Backpressure | **Complete** | `/home/jeff/aura/aura/transport/src/rate_limiter.rs:13-64`<br>`/home/jeff/aura/aura/bus/src/lib.rs:224-253` | `/home/jeff/aura/aura/bus/src/rate_limiter.rs:5-19` (`test_rate_limiter`) | None. Burst rejection and rate limiting verified. |
+| **BUS-009** | Per-Identity In-Memory Rate Limiting Guard | **Complete** | `/home/jeff/aura/aura/bus/src/lib.rs:245-253`<br>`/home/jeff/aura/aura/transport/src/rate_limiter.rs:33-58` | `/home/jeff/aura/aura/bus/src/rate_limiter.rs:9-18` | None. Per-SVID burst throttle verified. |
 
 #### NET Domain (HTTP/3 QUIC Transport & MCP Layer)
 
 | Req ID | Requirement Name | Status | Primary Code Citation | Test Citation / Verification | Next Steps |
 |---|---|:---:|---|---|---|
-| **NET-001** | Native HTTP/3 QUIC Transport Listener | **Complete** | `/home/jeff/aura/aura-core/src/transport/http3.rs:55-57, 109-112`<br>`/home/jeff/aura/aura-core/src/transport/mod.rs:12-17` | `/home/jeff/aura/aura-core/src/transport/http3.rs:126-142` (`test_quic_listener_binding`) | None. UDP socket listener binding verified. |
-| **NET-002** | 0-RTT Connection Resumption | **Complete** | `/home/jeff/aura/aura-core/src/transport/http3.rs:31-32` | `/home/jeff/aura/aura-core/src/transport/http3.rs:119-124` (`test_quiche_config_generation`) | None. TLS 1.3 early data verified in Quiche config. |
-| **NET-003** | Active Connection Migration | **Complete** | `/home/jeff/aura/aura-core/src/transport/http3.rs:34-35` | `/home/jeff/aura/aura-core/src/transport/http3.rs:119-124` | None. Connection migration flag verified. |
-| **NET-004** | ALPN Protocol Negotiation | **Complete** | `/home/jeff/aura/aura-core/src/transport/http3.rs:18-19` | `/home/jeff/aura/aura-core/src/transport/http3.rs:119-124` | None. ALPN protocols `h3` and `h2` configured. |
-| **NET-005** | Silent TCP/HTTP-2 Fallback via Alt-Svc | **Complete** | `/home/jeff/aura/aura-core/src/transport/http3.rs:58-86`<br>`/home/jeff/aura/aura-core/src/config/mod.rs:208, 220` | `/home/jeff/aura/aura-core/src/transport/http3.rs:144-170` (`test_tcp_fallback_alt_svc`) | None. Alt-Svc header generation and TCP listener verified. |
-| **NET-006** | HOL Blocking Elimination & Stream Isolation | **Complete** | `/home/jeff/aura/aura-core/src/transport/http3.rs:88-103`<br>`/home/jeff/aura/aura-core/src/identity/mod.rs:634` | `/home/jeff/aura/aura-core/src/transport/http3.rs:119-124`<br>`/home/jeff/aura/aura-core/src/identity/mod.rs:813-827` | None. Sans-I/O QUIC stream isolation verified. |
-| **NET-007** | Stateless July 2026 MCP Server Interface | **Partial** | `/home/jeff/aura/aura-core/src/transport/http3.rs:8-10, 88-103`<br>`/home/jeff/aura/aura-core/src/lib.rs:32-33` | `/home/jeff/aura/aura-core/src/transport/mod.rs:24-40` (`test_init_http3_multiplexer`) | **Next Steps**: Implement stateless MCP server dispatch handling `serverUrl` endpoint routes over HTTP/3 QUIC streams, parsing MCP JSON-RPC 2.0 payloads (`tools/list`, `tools/call`), and returning structured responses. |
+| **NET-001** | Native HTTP/3 QUIC Transport Listener | **Complete** | `/home/jeff/aura/aura/transport/src/http3.rs:55-57, 109-112`<br>`/home/jeff/aura/aura/transport/src/lib.rs:12-17` | `/home/jeff/aura/aura/transport/src/http3.rs:126-142` (`test_quic_listener_binding`) | None. UDP socket listener binding verified. |
+| **NET-002** | 0-RTT Connection Resumption | **Complete** | `/home/jeff/aura/aura/transport/src/http3.rs:31-32` | `/home/jeff/aura/aura/transport/src/http3.rs:119-124` (`test_quiche_config_generation`) | None. TLS 1.3 early data verified in Quiche config. |
+| **NET-003** | Active Connection Migration | **Complete** | `/home/jeff/aura/aura/transport/src/http3.rs:34-35` | `/home/jeff/aura/aura/transport/src/http3.rs:119-124` | None. Connection migration flag verified. |
+| **NET-004** | ALPN Protocol Negotiation | **Complete** | `/home/jeff/aura/aura/transport/src/http3.rs:18-19` | `/home/jeff/aura/aura/transport/src/http3.rs:119-124` | None. ALPN protocols `h3` and `h2` configured. |
+| **NET-005** | Silent TCP/HTTP-2 Fallback via Alt-Svc | **Complete** | `/home/jeff/aura/aura/transport/src/http3.rs:58-86`<br>`/home/jeff/aura/aura/host/src/config/mod.rs:208, 220` | `/home/jeff/aura/aura/transport/src/http3.rs:144-170` (`test_tcp_fallback_alt_svc`) | None. Alt-Svc header generation and TCP listener verified. |
+| **NET-006** | HOL Blocking Elimination & Stream Isolation | **Complete** | `/home/jeff/aura/aura/transport/src/http3.rs:88-103`<br>`/home/jeff/aura/aura/iam/src/lib.rs:634` | `/home/jeff/aura/aura/transport/src/http3.rs:119-124`<br>`/home/jeff/aura/aura/iam/src/lib.rs:813-827` | None. Sans-I/O QUIC stream isolation verified. |
+| **NET-007** | Stateless July 2026 MCP Server Interface | **Partial** | `/home/jeff/aura/aura/transport/src/http3.rs:8-10, 88-103`<br>`/home/jeff/aura/aura/host/src/core.rs:32-33` | `/home/jeff/aura/aura/transport/src/lib.rs:24-40` (`test_init_http3_multiplexer`) | **Next Steps**: Implement stateless MCP server dispatch handling `serverUrl` endpoint routes over HTTP/3 QUIC streams, parsing MCP JSON-RPC 2.0 payloads (`tools/list`, `tools/call`), and returning structured responses. |
 
 #### IAM Domain (SPIFFE/SPIRE Identity & Cedar Policy Enforcer)
 
 | Req ID | Requirement Name | Status | Primary Code Citation | Test Citation / Verification | Next Steps |
 |---|---|:---:|---|---|---|
-| **IAM-001** | Dynamic Workload Attestation via SPIRE | **Complete** | `/home/jeff/aura/aura-core/src/identity/mod.rs:281-321, 536-563`<br>`/home/jeff/aura/deploy/spire/README.md:1-75` | `/home/jeff/aura/aura-core/src/identity/mod.rs:706-730` (`test_fetch_svid_fallback`) | None. SPIRE agent client with dev fallback verified. |
-| **IAM-002** | Canonical SPIFFE SVID URI Schema | **Complete** | `/home/jeff/aura/aura-core/src/identity/mod.rs:169-181, 613-627`<br>`/home/jeff/aura/aura-sdk/aura_sdk/bus/client.py:34-58` | `/home/jeff/aura/aura-core/src/identity/mod.rs:732-740` (`test_spiffe_id_parsing_and_trust_domain`) | None. URI parsing and validation verified. |
-| **IAM-003** | Zero-Trust Default-Deny Authorization | **Complete** | `/home/jeff/aura/aura-core/src/identity/mod.rs:182-195, 337-361` | `/home/jeff/aura/aura-core/src/identity/mod.rs:742-753` (`test_scoped_svid_default_deny`) | None. Empty scope execution rejected with 403. |
-| **IAM-004** | Explicit Capability Scopes & Non-Escalation | **Complete** | `/home/jeff/aura/aura-core/src/identity/mod.rs:19-74, 565-600` | `/home/jeff/aura/aura-core/src/identity/mod.rs:765-785` (`test_cannot_broaden_scopes_at_runtime`) | None. Scope broadening prevention verified. |
-| **IAM-005** | Explicit ScopeDenied & Cedar Policy Evaluation | **Complete** | `/home/jeff/aura/aura-core/src/identity/mod.rs:80-98, 415-484` | `/home/jeff/aura/aura-core/src/identity/mod.rs:854-860` (`test_cedar_policy_evaluation`) | None. Cedar policy engine integration verified. |
-| **IAM-006** | Filesystem Path-Prefix Boundary Matching | **Complete** | `/home/jeff/aura/aura-core/src/identity/mod.rs:364-413` | `/home/jeff/aura/aura-core/src/identity/mod.rs:787-810` (`test_path_prefix_boundary_enforcement`) | None. Traversal and boundary violations blocked. |
-| **IAM-007** | mTLS Peer Identity & Trust Domain Enforcement | **Complete** | `/home/jeff/aura/aura-core/src/identity/mod.rs:633-663` | `/home/jeff/aura/aura-core/src/identity/mod.rs:812-827` (`test_mtls_peer_validation`) | None. Rogue trust domain rejection verified. |
-| **IAM-008** | Enterprise Trust Domain Federation Manager | **Complete** | `/home/jeff/aura/aura-core/src/identity/mod.rs:666-694` | `/home/jeff/aura/aura-core/src/identity/mod.rs:829-852` (`test_federation_trust_domain_hooks`) | None (fast-follow: connect bundle sync to dynamic SPIRE federation API). |
+| **IAM-001** | Dynamic Workload Attestation via SPIRE | **Complete** | `/home/jeff/aura/aura/iam/src/lib.rs:281-321, 536-563`<br>`/home/jeff/aura/aura/iam/spire/README.md:1-75` | `/home/jeff/aura/aura/iam/src/lib.rs:706-730` (`test_fetch_svid_fallback`) | None. SPIRE agent client with dev fallback verified. |
+| **IAM-002** | Canonical SPIFFE SVID URI Schema | **Complete** | `/home/jeff/aura/aura/iam/src/lib.rs:169-181, 613-627`<br>`/home/jeff/aura/aura-sdk/aura_sdk/bus/client.py:34-58` | `/home/jeff/aura/aura/iam/src/lib.rs:732-740` (`test_spiffe_id_parsing_and_trust_domain`) | None. URI parsing and validation verified. |
+| **IAM-003** | Zero-Trust Default-Deny Authorization | **Complete** | `/home/jeff/aura/aura/iam/src/lib.rs:182-195, 337-361` | `/home/jeff/aura/aura/iam/src/lib.rs:742-753` (`test_scoped_svid_default_deny`) | None. Empty scope execution rejected with 403. |
+| **IAM-004** | Explicit Capability Scopes & Non-Escalation | **Complete** | `/home/jeff/aura/aura/iam/src/lib.rs:19-74, 565-600` | `/home/jeff/aura/aura/iam/src/lib.rs:765-785` (`test_cannot_broaden_scopes_at_runtime`) | None. Scope broadening prevention verified. |
+| **IAM-005** | Explicit ScopeDenied & Cedar Policy Evaluation | **Complete** | `/home/jeff/aura/aura/iam/src/lib.rs:80-98, 415-484` | `/home/jeff/aura/aura/iam/src/lib.rs:854-860` (`test_cedar_policy_evaluation`) | None. Cedar policy engine integration verified. |
+| **IAM-006** | Filesystem Path-Prefix Boundary Matching | **Complete** | `/home/jeff/aura/aura/iam/src/lib.rs:364-413` | `/home/jeff/aura/aura/iam/src/lib.rs:787-810` (`test_path_prefix_boundary_enforcement`) | None. Traversal and boundary violations blocked. |
+| **IAM-007** | mTLS Peer Identity & Trust Domain Enforcement | **Complete** | `/home/jeff/aura/aura/iam/src/lib.rs:633-663` | `/home/jeff/aura/aura/iam/src/lib.rs:812-827` (`test_mtls_peer_validation`) | None. Rogue trust domain rejection verified. |
+| **IAM-008** | Enterprise Trust Domain Federation Manager | **Complete** | `/home/jeff/aura/aura/iam/src/lib.rs:666-694` | `/home/jeff/aura/aura/iam/src/lib.rs:829-852` (`test_federation_trust_domain_hooks`) | None (fast-follow: connect bundle sync to dynamic SPIRE federation API). |
 
 #### AGT Domain (Cognitive Scripting SDK)
 
@@ -135,10 +135,10 @@ A total of **121 requirements** spanning Phases M0 through M3 were comprehensive
 
 | Req ID | Requirement Name | Status | Primary Code Citation | Test Citation / Verification | Next Steps |
 |---|---|:---:|---|---|---|
-| **NFR-SEC-001** | Zero-Trust Identity Verification | **Complete** | `/home/jeff/aura/aura-core/src/identity/mod.rs:182-205, 281-321` | `/home/jeff/aura/aura-core/src/identity/mod.rs:742-753` | None. Default-deny strictly enforced. |
-| **NFR-SEC-002** | Granular Scope Enforcement & Anti-Escalation | **Complete** | `/home/jeff/aura/aura-core/src/identity/mod.rs:80-98, 565-600` | `/home/jeff/aura/aura-core/src/identity/mod.rs:765-785` | None. Runtime escalation denied. |
-| **NFR-SEC-003** | Cryptographic Transit Encryption & Envelope Integrity | **Complete** | `/home/jeff/aura/aura-core/src/transport/http3.rs:18-37`<br>`/home/jeff/aura/aura-sdk/aura_sdk/bus/client.py:72-121` | `/home/jeff/aura/aura-sdk/tests/test_bus_client.py:40-60` | None. TLS 1.3 / mTLS and envelope integrity verified. |
-| **NFR-SEC-004** | Sandbox & Path Boundary Containment | **Complete** | `/home/jeff/aura/aura-core/src/identity/mod.rs:364-413` | `/home/jeff/aura/aura-core/src/identity/mod.rs:787-810` | None. Boundary containment and traversal defenses verified. |
+| **NFR-SEC-001** | Zero-Trust Identity Verification | **Complete** | `/home/jeff/aura/aura/iam/src/lib.rs:182-205, 281-321` | `/home/jeff/aura/aura/iam/src/lib.rs:742-753` | None. Default-deny strictly enforced. |
+| **NFR-SEC-002** | Granular Scope Enforcement & Anti-Escalation | **Complete** | `/home/jeff/aura/aura/iam/src/lib.rs:80-98, 565-600` | `/home/jeff/aura/aura/iam/src/lib.rs:765-785` | None. Runtime escalation denied. |
+| **NFR-SEC-003** | Cryptographic Transit Encryption & Envelope Integrity | **Complete** | `/home/jeff/aura/aura/transport/src/http3.rs:18-37`<br>`/home/jeff/aura/aura-sdk/aura_sdk/bus/client.py:72-121` | `/home/jeff/aura/aura-sdk/tests/test_bus_client.py:40-60` | None. TLS 1.3 / mTLS and envelope integrity verified. |
+| **NFR-SEC-004** | Sandbox & Path Boundary Containment | **Complete** | `/home/jeff/aura/aura/iam/src/lib.rs:364-413` | `/home/jeff/aura/aura/iam/src/lib.rs:787-810` | None. Boundary containment and traversal defenses verified. |
 
 ---
 
@@ -148,59 +148,59 @@ A total of **121 requirements** spanning Phases M0 through M3 were comprehensive
 
 | Req ID | Requirement Name | Status | Primary Code Citation | Test Citation / Verification | Next Steps |
 |---|---|:---:|---|---|---|
-| **EXE-WASM-001** | Docker-Free WebAssembly Runtime Engine | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/wasm.rs:9-14`<br>`/home/jeff/aura/aura-core/src/hypervisor/mod.rs:5-10` | `/home/jeff/aura/aura-core/src/hypervisor/mod.rs:28-32` | None. Embedded Wasmtime engine verified. |
-| **EXE-WASM-002** | Cranelift JIT Compiler Optimization | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/wasm.rs:22-27`<br>`/home/jeff/aura/aura-core/src/config/mod.rs:274, 294-301` | `/home/jeff/aura/aura-core/src/config/mod.rs:669-676` (`test_validation_rejects_invalid_wasm_opt_level`) | None. Optimization level configuration verified. |
-| **EXE-WASM-003** | Tokio Asynchronous Integration | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/wasm.rs:29-30, 108-114` | `/home/jeff/aura/aura-core/src/hypervisor/wasm.rs:140-157` | None. Async WASI integration verified. |
-| **EXE-WASM-004** | WASI 0.3 Component Model Support | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/wasm.rs:32-33, 48-63` | `/home/jeff/aura/aura-core/src/hypervisor/wasm.rs:140-157` | None. Component model and `WasiView` state verified. |
-| **EXE-WASM-005** | Instruction Fuel Metering | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/wasm.rs:35-36, 105, 128`<br>`/home/jeff/aura/aura-core/src/config/mod.rs:272, 280` | `/home/jeff/aura/aura-core/src/hypervisor/wasm.rs:160-199` (`test_fuel_metering_trap`) | None. Runaway loop deterministic trap verified. |
-| **EXE-WASM-006** | High-Concurrency Pooling Instance Allocator | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/wasm.rs:38-43`<br>`/home/jeff/aura/aura-core/src/config/mod.rs:273, 281` | `/home/jeff/aura/aura-core/src/hypervisor/wasm.rs:140-157` | None. Pooling instance allocator verified. |
-| **EXE-WASM-007** | Asynchronous Linker & Capability Attestation | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/wasm.rs:65-75, 78-90` | `/home/jeff/aura/aura-core/src/hypervisor/wasm.rs:201-212` (`test_wasi_capability_denied`) | None. Zero-Trust capability validation in linker verified. |
-| **EXE-WASM-008** | Component Run Dispatch & Static Composition | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/wasm.rs:92-117, 119-132` | `/home/jeff/aura/aura-core/src/hypervisor/wasm.rs:140-157` (`test_wasi_component_execution`) | None. Static composition invariant verified. |
+| **EXE-WASM-001** | Docker-Free WebAssembly Runtime Engine | **Complete** | `/home/jeff/aura/aura/runtimes/wasm/src/lib.rs:9-14`<br>`/home/jeff/aura/aura-core/src/hypervisor/mod.rs:5-10` | `/home/jeff/aura/aura-core/src/hypervisor/mod.rs:28-32` | None. Embedded Wasmtime engine verified. |
+| **EXE-WASM-002** | Cranelift JIT Compiler Optimization | **Complete** | `/home/jeff/aura/aura/runtimes/wasm/src/lib.rs:22-27`<br>`/home/jeff/aura/aura/host/src/config/mod.rs:274, 294-301` | `/home/jeff/aura/aura/host/src/config/mod.rs:669-676` (`test_validation_rejects_invalid_wasm_opt_level`) | None. Optimization level configuration verified. |
+| **EXE-WASM-003** | Tokio Asynchronous Integration | **Complete** | `/home/jeff/aura/aura/runtimes/wasm/src/lib.rs:29-30, 108-114` | `/home/jeff/aura/aura/runtimes/wasm/src/lib.rs:140-157` | None. Async WASI integration verified. |
+| **EXE-WASM-004** | WASI 0.3 Component Model Support | **Complete** | `/home/jeff/aura/aura/runtimes/wasm/src/lib.rs:32-33, 48-63` | `/home/jeff/aura/aura/runtimes/wasm/src/lib.rs:140-157` | None. Component model and `WasiView` state verified. |
+| **EXE-WASM-005** | Instruction Fuel Metering | **Complete** | `/home/jeff/aura/aura/runtimes/wasm/src/lib.rs:35-36, 105, 128`<br>`/home/jeff/aura/aura/host/src/config/mod.rs:272, 280` | `/home/jeff/aura/aura/runtimes/wasm/src/lib.rs:160-199` (`test_fuel_metering_trap`) | None. Runaway loop deterministic trap verified. |
+| **EXE-WASM-006** | High-Concurrency Pooling Instance Allocator | **Complete** | `/home/jeff/aura/aura/runtimes/wasm/src/lib.rs:38-43`<br>`/home/jeff/aura/aura/host/src/config/mod.rs:273, 281` | `/home/jeff/aura/aura/runtimes/wasm/src/lib.rs:140-157` | None. Pooling instance allocator verified. |
+| **EXE-WASM-007** | Asynchronous Linker & Capability Attestation | **Complete** | `/home/jeff/aura/aura/runtimes/wasm/src/lib.rs:65-75, 78-90` | `/home/jeff/aura/aura/runtimes/wasm/src/lib.rs:201-212` (`test_wasi_capability_denied`) | None. Zero-Trust capability validation in linker verified. |
+| **EXE-WASM-008** | Component Run Dispatch & Static Composition | **Complete** | `/home/jeff/aura/aura/runtimes/wasm/src/lib.rs:92-117, 119-132` | `/home/jeff/aura/aura/runtimes/wasm/src/lib.rs:140-157` (`test_wasi_component_execution`) | None. Static composition invariant verified. |
 
 #### EXE-VM Domain (Firecracker MicroVM Hypervisor & Jailer Isolation)
 
 | Req ID | Requirement Name | Status | Primary Code Citation | Test Citation / Verification | Next Steps |
 |---|---|:---:|---|---|---|
-| **EXE-VM-001** | Hardware-Isolated KVM Virtualization | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:329-357`<br>`/home/jeff/aura/aura-core/src/hypervisor/mod.rs:12-15` | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:561-571` | None. VirtIO KVM virtualization verified. |
-| **EXE-VM-002** | Nested Virtualization Host Validation | **Partial** | `/home/jeff/aura/aura-core/src/lib.rs:37`<br>`/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:88-100`<br>`deploy/images/README.md:37` | `/home/jeff/aura/aura-core/src/hypervisor/mod.rs:21-25` (`test_init_firecracker`) | **Next Steps**: Implement genuine `/dev/kvm` device existence and read/write permission verification in `hypervisor::init_firecracker()` (e.g. `std::fs::OpenOptions::new().read(true).write(true).open("/dev/kvm")`) with configurable fallback/mock mode for containerized/CI environments. |
-| **EXE-VM-003** | Jailer Daemon Isolation | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:391-427`<br>`/home/jeff/aura/aura-core/src/config/mod.rs:306-327` | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:561-571` | None. Jailer cgroups v2/chroot/seccomp wrapper verified. |
-| **EXE-VM-004** | Unix Domain Socket API Client | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:429-468, 502-535` | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:581-593` | None. HTTP/1.1 UDS client verified. |
-| **EXE-VM-005** | Minimal VirtIO Sizing & Boot Overhead | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:448-453`<br>`/home/jeff/aura/aura-core/src/config/mod.rs:311-312, 323-324` | `/home/jeff/aura/aura-core/src/config/mod.rs:570-590`<br>`/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:596-614` (`test_specialized_rootfs_configurations`) | None. Minimal machine sizing verified. |
-| **EXE-VM-006** | Session-Scoped Ephemeral Lifecycle | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:329-357, 471-500` | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:574-579` | None. Ephemeral instance allocation verified. |
-| **EXE-VM-007** | RootFS Drive Attachment | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:442-446` | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:581-593` | None. PUT `/drives/rootfs` drive binding verified. |
-| **EXE-VM-008** | Cold Boot Action Dispatch | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:460-468` | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:581-593` | None. `InstanceStart` boot action verified. |
-| **EXE-VM-009** | VirtIO AF_VSOCK Multiplexing | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:455-459, 247-327, 376-389` | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:567-570, 616-644` | None. AF_VSOCK device binding and stream handling verified. |
-| **EXE-VM-010** | Specialized RootFS Image Matrix | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:17-84`<br>`deploy/images/build_browser_image.sh`<br>`deploy/images/build_computer_image.sh` | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:596-614` | None. Image builds and configurations verified. |
-| **EXE-VM-011** | Filesystem Layering & Overlay | **Partial** | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:444` (`"is_read_only": false`)<br>`deploy/images/build_browser_image.sh:221` | Unit tests verify drive configuration | **Next Steps**: Set `"is_read_only": true` for the primary rootfs in `configure_and_boot()` and attach an ephemeral overlayfs or writable scratch drive so guest mutations are discarded upon microVM teardown. |
-| **EXE-VM-012** | Deterministic State Elimination | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:471-500, 538-542` | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:574-579` | None. Socket unlinking and process termination verified. |
-| **EXE-VM-013** | Graceful Shutdown Protocol | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:475-476` | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:574-579` | None. `SendCtrlAltDel` action verified. |
-| **EXE-VM-014** | Lifecycle Resource Teardown | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:471-500, 538-542` | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:574-579` | None. `Drop` trait teardown verified. |
-| **EXE-VM-015** | Transparent TLS Egress Proxy | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/proxy.rs:8-416`<br>`/home/jeff/aura/aura-core/src/config/mod.rs:245-268` | `/home/jeff/aura/aura-core/src/hypervisor/proxy.rs:500-645` (4 proxy tests) | None. SNI parser, allowlist, and Alert 49 drop verified. |
+| **EXE-VM-001** | Hardware-Isolated KVM Virtualization | **Complete** | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:329-357`<br>`/home/jeff/aura/aura-core/src/hypervisor/mod.rs:12-15` | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:561-571` | None. VirtIO KVM virtualization verified. |
+| **EXE-VM-002** | Nested Virtualization Host Validation | **Partial** | `/home/jeff/aura/aura/host/src/core.rs:37`<br>`/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:88-100`<br>`deploy/images/README.md:37` | `/home/jeff/aura/aura-core/src/hypervisor/mod.rs:21-25` (`test_init_firecracker`) | **Next Steps**: Implement genuine `/dev/kvm` device existence and read/write permission verification in `hypervisor::init_firecracker()` (e.g. `std::fs::OpenOptions::new().read(true).write(true).open("/dev/kvm")`) with configurable fallback/mock mode for containerized/CI environments. |
+| **EXE-VM-003** | Jailer Daemon Isolation | **Complete** | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:391-427`<br>`/home/jeff/aura/aura/host/src/config/mod.rs:306-327` | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:561-571` | None. Jailer cgroups v2/chroot/seccomp wrapper verified. |
+| **EXE-VM-004** | Unix Domain Socket API Client | **Complete** | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:429-468, 502-535` | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:581-593` | None. HTTP/1.1 UDS client verified. |
+| **EXE-VM-005** | Minimal VirtIO Sizing & Boot Overhead | **Complete** | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:448-453`<br>`/home/jeff/aura/aura/host/src/config/mod.rs:311-312, 323-324` | `/home/jeff/aura/aura/host/src/config/mod.rs:570-590`<br>`/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:596-614` (`test_specialized_rootfs_configurations`) | None. Minimal machine sizing verified. |
+| **EXE-VM-006** | Session-Scoped Ephemeral Lifecycle | **Complete** | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:329-357, 471-500` | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:574-579` | None. Ephemeral instance allocation verified. |
+| **EXE-VM-007** | RootFS Drive Attachment | **Complete** | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:442-446` | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:581-593` | None. PUT `/drives/rootfs` drive binding verified. |
+| **EXE-VM-008** | Cold Boot Action Dispatch | **Complete** | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:460-468` | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:581-593` | None. `InstanceStart` boot action verified. |
+| **EXE-VM-009** | VirtIO AF_VSOCK Multiplexing | **Complete** | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:455-459, 247-327, 376-389` | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:567-570, 616-644` | None. AF_VSOCK device binding and stream handling verified. |
+| **EXE-VM-010** | Specialized RootFS Image Matrix | **Complete** | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:17-84`<br>`aura/runtimes/microvm/images/build_browser_image.sh`<br>`aura/runtimes/microvm/images/build_computer_image.sh` | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:596-614` | None. Image builds and configurations verified. |
+| **EXE-VM-011** | Filesystem Layering & Overlay | **Partial** | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:444` (`"is_read_only": false`)<br>`aura/runtimes/microvm/images/build_browser_image.sh:221` | Unit tests verify drive configuration | **Next Steps**: Set `"is_read_only": true` for the primary rootfs in `configure_and_boot()` and attach an ephemeral overlayfs or writable scratch drive so guest mutations are discarded upon microVM teardown. |
+| **EXE-VM-012** | Deterministic State Elimination | **Complete** | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:471-500, 538-542` | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:574-579` | None. Socket unlinking and process termination verified. |
+| **EXE-VM-013** | Graceful Shutdown Protocol | **Complete** | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:475-476` | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:574-579` | None. `SendCtrlAltDel` action verified. |
+| **EXE-VM-014** | Lifecycle Resource Teardown | **Complete** | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:471-500, 538-542` | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:574-579` | None. `Drop` trait teardown verified. |
+| **EXE-VM-015** | Transparent TLS Egress Proxy | **Complete** | `/home/jeff/aura/aura/runtimes/microvm/src/proxy.rs:8-416`<br>`/home/jeff/aura/aura/host/src/config/mod.rs:245-268` | `/home/jeff/aura/aura/runtimes/microvm/src/proxy.rs:500-645` (4 proxy tests) | None. SNI parser, allowlist, and Alert 49 drop verified. |
 
 #### TOOL-CMP Domain (Computer GUI Automation & Display Sandbox)
 
 | Req ID | Requirement Name | Status | Primary Code Citation | Test Citation / Verification | Next Steps |
 |---|---|:---:|---|---|---|
-| **TOOL-CMP-001** | Virtual Display Server & Window Manager | **Complete** | `deploy/images/build_computer_image.sh:238-278`<br>`aura-core/src/hypervisor/firecracker.rs:24-25, 131-134` | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:609-614` | None. Xvfb and fluxbox configuration verified. |
-| **TOOL-CMP-002** | GUI Testing & Input Automation Tools | **Complete** | `deploy/images/build_computer_image.sh:282-288`<br>`aura-sdk/aura_sdk/tools/computer.py:4-10` | `deploy/images/build_computer_image.sh:282-288` (launch-xcalc helper)<br>`deploy/images/build_computer_image.sh:338-348` (chroot smoke test)<br>`aura-sdk/aura_sdk/tools/computer.py:4-10` | None. `xdotool` and `xcalc` automation verified. |
-| **TOOL-CMP-003** | Rust AF_VSOCK Screenshot Daemon | **Complete** | `deploy/images/vsock-screenshot-daemon/src/main.rs`<br>`deploy/images/vsock-screenshot-daemon/src/capture.rs`<br>`aura-core/src/hypervisor/firecracker.rs:247-327` | `deploy/images/vsock-screenshot-daemon/src/capture.rs:160-175` (`test_encode_png_dummy_buffer`) | None. X11 capture and vsock streaming verified. |
-| **TOOL-CMP-004** | Zero-Trust Screenshot Validation | **Complete** | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:11-12, 137-245` | `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:616-706` | None. PNG magic byte validation and length prefix verified. |
+| **TOOL-CMP-001** | Virtual Display Server & Window Manager | **Complete** | `aura/runtimes/microvm/images/build_computer_image.sh:238-278`<br>`aura/runtimes/microvm/src/firecracker.rs:24-25, 131-134` | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:609-614` | None. Xvfb and fluxbox configuration verified. |
+| **TOOL-CMP-002** | GUI Testing & Input Automation Tools | **Complete** | `aura/runtimes/microvm/images/build_computer_image.sh:282-288`<br>`aura-sdk/aura_sdk/tools/computer.py:4-10` | `aura/runtimes/microvm/images/build_computer_image.sh:282-288` (launch-xcalc helper)<br>`aura/runtimes/microvm/images/build_computer_image.sh:338-348` (chroot smoke test)<br>`aura-sdk/aura_sdk/tools/computer.py:4-10` | None. `xdotool` and `xcalc` automation verified. |
+| **TOOL-CMP-003** | Rust AF_VSOCK Screenshot Daemon | **Complete** | `deploy/images/vsock-screenshot-daemon/src/main.rs`<br>`deploy/images/vsock-screenshot-daemon/src/capture.rs`<br>`aura/runtimes/microvm/src/firecracker.rs:247-327` | `deploy/images/vsock-screenshot-daemon/src/capture.rs:160-175` (`test_encode_png_dummy_buffer`) | None. X11 capture and vsock streaming verified. |
+| **TOOL-CMP-004** | Zero-Trust Screenshot Validation | **Complete** | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:11-12, 137-245` | `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:616-706` | None. PNG magic byte validation and length prefix verified. |
 
 #### TOOL-BASH Domain (Bash Ephemeral Shell & Sandboxed Linting)
 
 | Req ID | Requirement Name | Status | Primary Code Citation | Test Citation / Verification | Next Steps |
 |---|---|:---:|---|---|---|
-| **TOOL-BASH-001** | Ephemeral Bash Shell Sandbox | **Complete** | `tools/bash.json:1-8`<br>`aura-core/src/hypervisor/firecracker.rs:122-124`<br>`aura-core/src/runtime/registry.rs:56-62`<br>`aura-sdk/aura_sdk/tools/bash.py:4-10` | `/home/jeff/aura/aura-core/src/runtime/registry.rs:107-116` | None. Shell sandbox registration and execution verified. |
-| **TOOL-BASH-002** | Session Sandboxing & Resource Limits | **Partial** | `tools/bash.json:6` (`"timeoutMs": 125000`)<br>`aura-core/src/hypervisor/firecracker.rs:54`<br>`aura-sdk/aura_sdk/tools/bash.py:8-10` | Registry execution tests | **Next Steps**: Implement an in-guest persistent shell daemon listening over AF_VSOCK to maintain environment variables and working directory state across consecutive bash tool calls in a session. |
-| **TOOL-BASH-003** | Controlled Repository Linter Execution | **Complete** | `/home/jeff/aura/aura-core/src/knowledge/git.rs:173-231` | `/home/jeff/aura/aura-core/src/knowledge/git.rs:436-455, 521-549` (`test_apply_patch_halts_immediately_on_sandbox_lint_failure`, `test_sandbox_lint_validates_vm_configuration`) | None. MicroVM linter gating git commits verified. |
+| **TOOL-BASH-001** | Ephemeral Bash Shell Sandbox | **Complete** | `tools/bash.json:1-8`<br>`aura/runtimes/microvm/src/firecracker.rs:122-124`<br>`aura/host/src/runtime/registry.rs:56-62`<br>`aura-sdk/aura_sdk/tools/bash.py:4-10` | `/home/jeff/aura/aura/host/src/runtime/registry.rs:107-116` | None. Shell sandbox registration and execution verified. |
+| **TOOL-BASH-002** | Session Sandboxing & Resource Limits | **Partial** | `tools/bash.json:6` (`"timeoutMs": 125000`)<br>`aura/runtimes/microvm/src/firecracker.rs:54`<br>`aura-sdk/aura_sdk/tools/bash.py:8-10` | Registry execution tests | **Next Steps**: Implement an in-guest persistent shell daemon listening over AF_VSOCK to maintain environment variables and working directory state across consecutive bash tool calls in a session. |
+| **TOOL-BASH-003** | Controlled Repository Linter Execution | **Complete** | `/home/jeff/aura/aura/repo/src/git.rs:173-231` | `/home/jeff/aura/aura/repo/src/git.rs:436-455, 521-549` (`test_apply_patch_halts_immediately_on_sandbox_lint_failure`, `test_sandbox_lint_validates_vm_configuration`) | None. MicroVM linter gating git commits verified. |
 
 #### TOOL-BRW Domain (Headless Chromium Browser Sandbox)
 
 | Req ID | Requirement Name | Status | Primary Code Citation | Test Citation / Verification | Next Steps |
 |---|---|:---:|---|---|---|
-| **TOOL-BRW-001** | Headless Chromium Pre-Baked Image | **Complete** | `deploy/images/build_browser_image.sh:1-284`<br>`aura-core/src/hypervisor/firecracker.rs:22-23, 126-129`<br>`aura-core/src/runtime/registry.rs:63-69` | `/home/jeff/aura/aura-core/src/runtime/registry.rs:117-125` | None. Image build script with pre-cached fonts verified. |
+| **TOOL-BRW-001** | Headless Chromium Pre-Baked Image | **Complete** | `aura/runtimes/microvm/images/build_browser_image.sh:1-284`<br>`aura/runtimes/microvm/src/firecracker.rs:22-23, 126-129`<br>`aura/host/src/runtime/registry.rs:63-69` | `/home/jeff/aura/aura/host/src/runtime/registry.rs:117-125` | None. Image build script with pre-cached fonts verified. |
 | **TOOL-BRW-002** | Zero-Trust Browser Content Handling | **Complete** | `docs/architecture/threat-models/STRIDE.md:29`<br>`.agents/plugins/aura-dev-kit/skills/aura-tool-domain/SKILL.md:8`<br>`aura-sdk/aura_sdk/cognition/gemini.py:101-116` | `aura-sdk/aura_sdk/cognition/gemini.py:101-116` (`sanitize_and_check_credentials`)<br>`aura-sdk/tests/test_cognition_gemini.py:255-263` (`test_cog_009_credential_protection`) | None. Untrusted browser DOM content and credential sanitization verified. |
-| **TOOL-BRW-003** | CDP Remote Debugging Protocol | **Partial** | `deploy/images/build_browser_image.sh:185-204`<br>`tools/browser.json:5`<br>`aura-sdk/aura_sdk/tools/browser.py:8-10` | Image smoke tests confirm port 9222 listening | **Next Steps**: Wire a host-to-guest vsock TCP forwarding channel for port 9222 and integrate a headless CDP driver (e.g. `chromiumoxide`) in the Python SDK `BrowserTool.navigate()`. |
+| **TOOL-BRW-003** | CDP Remote Debugging Protocol | **Partial** | `aura/runtimes/microvm/images/build_browser_image.sh:185-204`<br>`tools/browser.json:5`<br>`aura-sdk/aura_sdk/tools/browser.py:8-10` | Image smoke tests confirm port 9222 listening | **Next Steps**: Wire a host-to-guest vsock TCP forwarding channel for port 9222 and integrate a headless CDP driver (e.g. `chromiumoxide`) in the Python SDK `BrowserTool.navigate()`. |
 
 #### TOOL-FS Domain (Path-Confined Atomic FileSystem Tool)
 
@@ -208,7 +208,7 @@ A total of **121 requirements** spanning Phases M0 through M3 were comprehensive
 |---|---|:---:|---|---|---|
 | **TOOL-FS-001** | Atomic File Operations | **Complete** | `tools/filesystem/src/service.rs:9-10, 35-155`<br>`tools/filesystem/src/patch.rs:1-232` | `tools/filesystem/tests/filesystem_test.rs:54-94` | None. Atomic write, read, and unified diff patch verified. |
 | **TOOL-FS-002** | Strict Workspace Path-Prefix Boundary | **Complete** | `tools/filesystem/src/path.rs:9-150`<br>`tools/filesystem/src/service.rs:10` | `tools/filesystem/tests/filesystem_test.rs:5-51` | None. Relative traversal and boundary escapes blocked. |
-| **TOOL-FS-003** | WASI 0.3 WIT Component Interface | **Complete** | `docs/architecture/wit/aura-fs.wit:1-27`<br>`tools/filesystem/src/lib.rs:9-38`<br>`tools/filesystem.json:3, 6` | `tools/filesystem/src/lib.rs` doctest | None. Standard WIT interface definitions verified. |
+| **TOOL-FS-003** | WASI 0.3 WIT Component Interface | **Complete** | `aura/runtimes/wasm/wit/aura-fs.wit:1-27`<br>`tools/filesystem/src/lib.rs:9-38`<br>`tools/filesystem.json:3, 6` | `tools/filesystem/src/lib.rs` doctest | None. Standard WIT interface definitions verified. |
 | **TOOL-FS-004** | Sub-Millisecond Execution Performance | **Complete** | `tools/filesystem/tests/filesystem_test.rs:120-131` | `test_submillisecond_execution` (<50ms benchmark) | None. Fast atomic execution verified. |
 
 ---
@@ -231,8 +231,8 @@ A total of **121 requirements** spanning Phases M0 through M3 were comprehensive
 | **COG-010** | Tool Call Argument Schema Validation | **Complete** | `aura-sdk/aura_sdk/cognition/gemini.py:79-81, 119-146, 208-210, 404-407` | `aura-sdk/tests/test_cognition_gemini.py:265-286` | None. JSON Schema parameter validation verified. |
 | **COG-011** | File Search Store Deletion & Cleanup | **Complete** | `aura-sdk/aura_sdk/cognition/gemini.py:233-257` | `aura-sdk/tests/test_cognition_gemini.py:208-214` | None. Store deletion and cleanup audit logging verified. |
 | **COG-012** | Tenant Billing Tag Injection | **Complete** | `aura-sdk/aura_sdk/cognition/gemini.py:319-325` | `aura-sdk/tests/test_cognition_gemini.py:288-306` | None. Client metadata tenant injection verified. |
-| **COG-013** | Host-Side Semantic Vector Prompt Cache | **Complete** | `aura-core/src/knowledge/cache.rs:79-140, 200-510`<br>`aura-sdk/aura_sdk/cognition/cache.py:64-328`<br>`aura-sdk/aura_sdk/cognition/gemini.py:148-170, 297-309` | `aura-sdk/tests/test_cognition_gemini.py:308-342`<br>`aura-sdk/tests/test_router_cache_context.py:19-56` | None. SQLite vector cache (<50ms, 0 tokens) verified. |
-| **COG-014** | Shadow Tracker File Storage Calculations | **Complete** | `aura-core/src/config/mod.rs:383-485`<br>`aura-core/src/transport/rate_limiter.rs:66-74, 124-176`<br>`aura-sdk/aura_sdk/cognition/gemini.py:205-231` | `aura-core/src/transport/rate_limiter.rs:294-328`<br>`aura-sdk/tests/test_cognition_gemini.py:344-351` | None. File storage tracking and pricing calculations verified. |
+| **COG-013** | Host-Side Semantic Vector Prompt Cache | **Complete** | `aura/repo/src/cache.rs:79-140, 200-510`<br>`aura-sdk/aura_sdk/cognition/cache.py:64-328`<br>`aura-sdk/aura_sdk/cognition/gemini.py:148-170, 297-309` | `aura-sdk/tests/test_cognition_gemini.py:308-342`<br>`aura-sdk/tests/test_router_cache_context.py:19-56` | None. SQLite vector cache (<50ms, 0 tokens) verified. |
+| **COG-014** | Shadow Tracker File Storage Calculations | **Complete** | `aura/host/src/config/mod.rs:383-485`<br>`aura/transport/src/rate_limiter.rs:66-74, 124-176`<br>`aura-sdk/aura_sdk/cognition/gemini.py:205-231` | `aura/transport/src/rate_limiter.rs:294-328`<br>`aura-sdk/tests/test_cognition_gemini.py:344-351` | None. File storage tracking and pricing calculations verified. |
 
 #### RTE Domain (Model Router & Token Economics)
 
@@ -246,17 +246,17 @@ A total of **121 requirements** spanning Phases M0 through M3 were comprehensive
 | **RTE-006** | Hot Configuration Reload | **Complete** | `aura-sdk/aura_sdk/routing/router.py:118-140` | `aura-sdk/tests/test_router.py:99-117` | None. Dynamic configuration reloading verified. |
 | **RTE-007** | Decision Audit Logging | **Complete** | `aura-sdk/aura_sdk/routing/router.py:69-88, 378-392` | `aura-sdk/tests/test_router.py:119-130` | None. Detailed decision audit logs verified. |
 | **RTE-008** | Per-Tenant Token and Cost Budgets | **Complete** | `aura-sdk/aura_sdk/routing/router.py:37-39, 46-66, 178-185` | `aura-sdk/tests/test_router.py:132-146` | None. Soft limit warnings and hard limit blocks verified. |
-| **RTE-009** | 90% Cost Budget Webhook & Task Queue Suspension | **Complete** | `aura-core/src/config/mod.rs:402-416`<br>`aura-core/src/transport/rate_limiter.rs:243-276`<br>`aura-core/src/transport/webhook.rs:66-260`<br>`aura-sdk/aura_sdk/routing/router.py:41-43, 192-205` | `aura-core/src/transport/rate_limiter.rs:330-376`<br>`aura-core/src/transport/webhook.rs:356-461`<br>`aura-sdk/tests/test_router.py:148-174` | None. 90% webhook, Pro tier block, and Zenoh freeze verified. |
+| **RTE-009** | 90% Cost Budget Webhook & Task Queue Suspension | **Complete** | `aura/host/src/config/mod.rs:402-416`<br>`aura/transport/src/rate_limiter.rs:243-276`<br>`aura/transport/src/webhook.rs:66-260`<br>`aura-sdk/aura_sdk/routing/router.py:41-43, 192-205` | `aura/transport/src/rate_limiter.rs:330-376`<br>`aura/transport/src/webhook.rs:356-461`<br>`aura-sdk/tests/test_router.py:148-174` | None. 90% webhook, Pro tier block, and Zenoh freeze verified. |
 
 #### GAP Domain (Context Saturation & Architectural Mitigations)
 
 | Req ID | Requirement Name | Status | Primary Code Citation | Test Citation / Verification | Next Steps |
 |---|---|:---:|---|---|---|
-| **GAP-001** | UDP Port 443 Middlebox & DPI Blocking | **Complete** | `aura-core/src/transport/http3.rs:55-86` | `aura-core/src/transport/http3.rs:144-170` | None. Alt-Svc fallback handles UDP blocking. |
-| **GAP-002** | 1-RTT Silent TCP Fallback via Alt-Svc / ALPN | **Complete** | `aura-core/src/transport/http3.rs:18-19, 58-86` | `aura-core/src/transport/http3.rs:144-170` | None. Transparent HTTP/2 over TCP fallback verified. |
-| **GAP-003** | WASI 0.3 Component Model Dynamic Linking Limitation | **Partial** | `aura-core/src/hypervisor/wasm.rs:65-75, 92-117` | Verified via static WIT component test runs | **Next Steps**: Await upstream Bytecode Alliance stabilization of the WASI Component Model 1.0 dynamic runtime linking specification; continue using deploy-time WIT component linking as the standardized workaround. |
-| **GAP-004** | Heavyweight Tool Execution in Ephemeral MicroVMs | **Complete** | `aura-core/src/hypervisor/firecracker.rs:329-357, 391-427` | `aura-core/src/hypervisor/firecracker.rs:561-571` | None. Ephemeral microVM routing for shell/GUI verified. |
-| **GAP-005** | Context Window Saturation in Long-Horizon Tasks | **Complete** | `aura-core/src/transport/rate_limiter.rs:87-240`<br>`aura-sdk/aura_sdk/cognition/context.py:49-72, 123-146` | `aura-sdk/tests/test_context_saturation.py:38-61` | None. Session token accumulation monitoring verified. |
+| **GAP-001** | UDP Port 443 Middlebox & DPI Blocking | **Complete** | `aura/transport/src/http3.rs:55-86` | `aura/transport/src/http3.rs:144-170` | None. Alt-Svc fallback handles UDP blocking. |
+| **GAP-002** | 1-RTT Silent TCP Fallback via Alt-Svc / ALPN | **Complete** | `aura/transport/src/http3.rs:18-19, 58-86` | `aura/transport/src/http3.rs:144-170` | None. Transparent HTTP/2 over TCP fallback verified. |
+| **GAP-003** | WASI 0.3 Component Model Dynamic Linking Limitation | **Partial** | `aura/runtimes/wasm/src/lib.rs:65-75, 92-117` | Verified via static WIT component test runs | **Next Steps**: Await upstream Bytecode Alliance stabilization of the WASI Component Model 1.0 dynamic runtime linking specification; continue using deploy-time WIT component linking as the standardized workaround. |
+| **GAP-004** | Heavyweight Tool Execution in Ephemeral MicroVMs | **Complete** | `aura/runtimes/microvm/src/firecracker.rs:329-357, 391-427` | `aura/runtimes/microvm/src/firecracker.rs:561-571` | None. Ephemeral microVM routing for shell/GUI verified. |
+| **GAP-005** | Context Window Saturation in Long-Horizon Tasks | **Complete** | `aura/transport/src/rate_limiter.rs:87-240`<br>`aura-sdk/aura_sdk/cognition/context.py:49-72, 123-146` | `aura-sdk/tests/test_context_saturation.py:38-61` | None. Session token accumulation monitoring verified. |
 | **GAP-006** | 80% Saturation Detection, Pause, & Summarization | **Complete** | `aura-sdk/aura_sdk/cognition/context.py:31, 158-194, 199-291`<br>`aura-sdk/aura_sdk/routing/router.py:258-298` | `aura-sdk/tests/test_context_saturation.py:24-162` | None. 80% threshold, Zenoh pause, Flash-Lite summary, and `seed-<uuid>` verified. |
 | **GAP-007** | Distilled Prompt Context Handoff | **Complete** | `aura-sdk/aura_sdk/cognition/context.py:85-88, 279-281` | `aura-sdk/tests/test_context_saturation.py:151-156` | None. `format_resumed_prompt` cleanly transfers context. |
 | **GAP-008** | Hard Limit Guard Against Infinite Summarization | **Complete** | `aura-sdk/aura_sdk/cognition/context.py:32, 44-46, 195-198, 214-220` | `aura-sdk/tests/test_context_saturation.py:164-214` | None. Ceiling (3 consecutive loops) and reset verified. |
@@ -325,14 +325,14 @@ For all 11 requirements evaluated as **Partial**, the following comprehensive an
 - **Phase & Domain:** Phase M0 (Workspace Initialization & Core Primitives)
 - **Specification:** Configure the Rust microkernel host with a multi-threaded Tokio runtime pool (`runtime::init_tokio_pool`) to manage concurrent I/O streams and asynchronous tasks without thread-blocking syscalls. (`requirements.md:38`)
 - **Current State:** 
-  - In `/home/jeff/aura/aura-core/src/runtime/mod.rs:3-6`:
+  - In `/home/jeff/aura/aura/host/src/runtime/mod.rs:3-6`:
     ```rust
     pub fn init_tokio_pool() -> Result<(), Box<dyn std::error::Error>> {
         println!("Tokio runtime thread-pool configured for highly concurrent HTTP/3 multiplexing.");
         Ok(())
     }
     ```
-  - In `/home/jeff/aura/aura-core/src/lib.rs:21-22`:
+  - In `/home/jeff/aura/aura/host/src/core.rs:21-22`:
     ```rust
     // 2. Initialize Tokio Runtime pool
     runtime::init_tokio_pool()?;
@@ -340,8 +340,8 @@ For all 11 requirements evaluated as **Partial**, the following comprehensive an
 - **Gap Analysis:**
   The function `runtime::init_tokio_pool()` is an empty stub that prints a string and immediately returns `Ok(())`. It does not construct or configure a multi-threaded Tokio runtime via `tokio::runtime::Builder`, does not allocate worker threads matching hardware core capacity, does not configure thread names, and does not expose a managed runtime handle. Microkernel tasks run on whatever ambient runtime invoked `aura_core::init()`, rather than an explicitly configured, high-throughput host thread pool.
 - **Actionable Next Steps:**
-  1. In `/home/jeff/aura/aura-core/src/config/mod.rs`, add runtime pool configuration options (`worker_threads: usize`, `max_blocking_threads: usize`, `thread_keep_alive_secs: u64`) to `AuraConfig`.
-  2. In `/home/jeff/aura/aura-core/src/runtime/mod.rs`, implement explicit runtime construction:
+  1. In `/home/jeff/aura/aura/host/src/config/mod.rs`, add runtime pool configuration options (`worker_threads: usize`, `max_blocking_threads: usize`, `thread_keep_alive_secs: u64`) to `AuraConfig`.
+  2. In `/home/jeff/aura/aura/host/src/runtime/mod.rs`, implement explicit runtime construction:
      ```rust
      pub fn init_tokio_pool(worker_threads: Option<usize>) -> Result<tokio::runtime::Runtime, Box<dyn std::error::Error>> {
          let threads = worker_threads.unwrap_or_else(num_cpus::get);
@@ -362,12 +362,12 @@ For all 11 requirements evaluated as **Partial**, the following comprehensive an
 - **Phase & Domain:** Phase M1 (Execution Host & Microkernel Lifecycle)
 - **Specification:** The host must run on a multi-threaded Tokio asynchronous runtime pool managing non-blocking concurrency without blocking worker threads on I/O or syscalls. (`requirements.md:50`)
 - **Current State:** 
-  - Directly shares the implementation of `M0-SPIKE-03` in `/home/jeff/aura/aura-core/src/runtime/mod.rs:3-6` and `/home/jeff/aura/aura-core/src/lib.rs:21-22`.
-  - In `aura-core/src/lib.rs`, `init()` is an `async fn` that assumes an outer runtime already exists, but the host lacks internal runtime metrics monitoring and worker thread starvation detection.
+  - Directly shares the implementation of `M0-SPIKE-03` in `/home/jeff/aura/aura/host/src/runtime/mod.rs:3-6` and `/home/jeff/aura/aura/host/src/core.rs:21-22`.
+  - In `aura/host/src/core.rs`, `init()` is an `async fn` that assumes an outer runtime already exists, but the host lacks internal runtime metrics monitoring and worker thread starvation detection.
 - **Gap Analysis:**
   While non-blocking async primitives (`tokio::spawn`, async channels, sans-I/O QUIC tasks) are used throughout `aura-core`, the host fails to configure or manage its own dedicated multi-threaded pool, lacking worker thread isolation between compute-heavy tasks (Wasmtime JIT compilation) and latency-sensitive I/O multiplexing (Zenoh and QUIC listeners).
 - **Actionable Next Steps:**
-  1. Configure dedicated runtime pools or Tokio task sets in `aura-core/src/runtime/mod.rs`: separate blocking/compute workloads (via `tokio::task::spawn_blocking`) from high-priority network I/O.
+  1. Configure dedicated runtime pools or Tokio task sets in `aura/host/src/runtime/mod.rs`: separate blocking/compute workloads (via `tokio::task::spawn_blocking`) from high-priority network I/O.
   2. Implement runtime health metrics monitoring using `tokio::runtime::RuntimeMetrics` to track worker queue depth, busy duration, and steal count.
   3. Add a unit test verifying that long-running blocking operations do not delay async timer ticks or Zenoh message dispatch.
 
@@ -377,7 +377,7 @@ For all 11 requirements evaluated as **Partial**, the following comprehensive an
 - **Phase & Domain:** Phase M1 (Execution Host & Microkernel Lifecycle)
 - **Specification:** The host transport layer must multiplex 5,000+ concurrent HTTP/3 QUIC streams without thread starvation, worker depletion, or application-layer head-of-line blocking. (`requirements.md:52`)
 - **Current State:**
-  - In `/home/jeff/aura/aura-core/src/transport/http3.rs:18-37`, `Http3Transport::build_quiche_config()` sets `quiche_config.set_initial_max_streams_bidi(config.initial_max_streams_bidi)`, where default config in `/home/jeff/aura/aura-core/src/config/mod.rs:215` specifies `10_000`.
+  - In `/home/jeff/aura/aura/transport/src/http3.rs:18-37`, `Http3Transport::build_quiche_config()` sets `quiche_config.set_initial_max_streams_bidi(config.initial_max_streams_bidi)`, where default config in `/home/jeff/aura/aura/host/src/config/mod.rs:215` specifies `10_000`.
   - The cited test in `http3.rs:126-142` (`test_quic_listener_binding`) merely binds to `127.0.0.1:0` to confirm port availability.
 - **Gap Analysis:**
   The Quiche transport configuration accommodates up to 10,000 streams in buffer sizing parameters, but the claim of verified 5,000+ concurrent stream multiplexing is entirely unproven by tests. No load generation, concurrency benchmark, or stream multiplexing stress test exists in the repository.
@@ -393,7 +393,7 @@ For all 11 requirements evaluated as **Partial**, the following comprehensive an
 - **Phase & Domain:** Phase M1 (Execution Host & Microkernel Lifecycle)
 - **Specification:** The host must maintain an abstracted runtime registry (`Registry`) mapping tool invocation identifiers to specialized execution substrates (WASM component or Firecracker microVM). (`requirements.md:59`)
 - **Current State:**
-  - In `/home/jeff/aura/aura-core/src/runtime/registry.rs:33-43`:
+  - In `/home/jeff/aura/aura/host/src/runtime/registry.rs:33-43`:
     ```rust
     pub fn load_from_config(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
         // Mock parsing TOML for now, just register a dummy for testing
@@ -411,7 +411,7 @@ For all 11 requirements evaluated as **Partial**, the following comprehensive an
 - **Gap Analysis:**
   While the in-memory data structures (`RuntimeBackend::Wasm`, `RuntimeBackend::Firecracker`) and default sandbox registration functions work correctly, declarative configuration loading from disk is completely mocked. `load_from_config()` does not read or parse TOML manifests, registering only a dummy `mock_tool` when the path contains `"test"`.
 - **Actionable Next Steps:**
-  1. Define Serde-deserializable manifest structs in `/home/jeff/aura/aura-core/src/runtime/registry.rs`:
+  1. Define Serde-deserializable manifest structs in `/home/jeff/aura/aura/host/src/runtime/registry.rs`:
      ```rust
      #[derive(serde::Deserialize)]
      pub struct ToolManifestFile {
@@ -449,7 +449,7 @@ For all 11 requirements evaluated as **Partial**, the following comprehensive an
 - **Phase & Domain:** Phase M1 (Zenoh Event Bus Architecture)
 - **Specification:** The bus must implement an asynchronous task queue listener on `tasks/dispatch` that routes invocations to sandboxes and emits completion events on `tasks/completion`. (`requirements.md:68`)
 - **Current State:**
-  - In `/home/jeff/aura/aura-core/src/bus/mod.rs:145-149`:
+  - In `/home/jeff/aura/aura/bus/src/lib.rs:145-149`:
     ```rust
     let result_str = if task.substrate.eq_ignore_ascii_case("wasm") {
         format!("Executed {} in WASM", task.instruction)
@@ -457,7 +457,7 @@ For all 11 requirements evaluated as **Partial**, the following comprehensive an
         format!("Executed {} in Firecracker microVM", task.instruction)
     };
     ```
-  - In `/home/jeff/aura/aura-core/src/bus/mod.rs:243, 261, 268, 273`:
+  - In `/home/jeff/aura/aura/bus/src/lib.rs:243, 261, 268, 273`:
     `start_task_listener_with_registry()` hardcodes `mock_spiffe_id = "spiffe://aura.local/agent/1"` and `CapabilityEnforcer::validate_svid("mock_jwt")`, and only prints log messages without invoking sandboxes.
 - **Gap Analysis:**
   The Zenoh pub/sub infrastructure, topic scoping, and JSON event serialization operate properly, but task execution is a simulation facade. Tasks dispatched to `tasks/dispatch` are not executed in real WASM components or Firecracker microVMs; instead, synthetic strings (`"Executed ... in WASM"`) are generated and returned. In addition, identity validation uses hardcoded mock strings.
@@ -476,13 +476,13 @@ For all 11 requirements evaluated as **Partial**, the following comprehensive an
 - **Phase & Domain:** Phase M1 (Transport Multiplexer & MCP Integration)
 - **Specification:** Provide a stateless Model Context Protocol (MCP) server conforming to the July 2026 specification using `serverUrl` endpoints. (`requirements.md:86`)
 - **Current State:**
-  - In `/home/jeff/aura/aura-core/src/transport/http3.rs:88-103`:
+  - In `/home/jeff/aura/aura/transport/src/http3.rs:88-103`:
     Spawns an async UDP packet-reading loop using `quiche::Header::from_slice()` with comments stating independent MCP streams map to isolated QUIC streams.
   - Zero MCP JSON-RPC protocol handling, method routers (`tools/list`, `tools/call`), or `serverUrl` endpoints exist in `http3.rs` or `aura-core`.
 - **Gap Analysis:**
   The HTTP/3 transport module provides low-level QUIC packet parsing and socket binding, but lacks any Model Context Protocol (MCP) server implementation. Currently, MCP tools are dispatched either via Zenoh (`client.call_tool`) or invoked as standalone binaries (`tools/ast-blast-radius`), while native stateless HTTP/3 MCP endpoints (`serverUrl`) remain unimplemented.
 - **Actionable Next Steps:**
-  1. Implement an MCP HTTP/3 endpoint handler in `/home/jeff/aura/aura-core/src/transport/mcp.rs` that accepts and decodes JSON-RPC 2.0 requests over QUIC streams.
+  1. Implement an MCP HTTP/3 endpoint handler in `/home/jeff/aura/aura/transport/src/mcp.rs` that accepts and decodes JSON-RPC 2.0 requests over QUIC streams.
   2. Implement standard MCP methods:
      - `tools/list`: enumerate available tools registered in `Registry`.
      - `tools/call`: parse tool arguments, invoke the corresponding WASM or microVM backend, and return conforming MCP responses (`content: [{type: "text", text: "..."}]`).
@@ -508,7 +508,7 @@ For all 11 requirements evaluated as **Partial**, the following comprehensive an
   There is zero code in `aura-core` validating `/dev/kvm` device existence, access permissions, or nested hardware virtualization support. `init_firecracker()` is a no-op placeholder. In addition, the citation to `docs/ROADMAP.md:23` was hallucinated.
 - **Actionable Next Steps:**
   1. Remove the non-existent citation `docs/ROADMAP.md:23` from `M0_M3_Audit_Report.md`.
-  2. In `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs`, implement `pub fn validate_kvm_support() -> Result<(), KvmError>`:
+  2. In `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs`, implement `pub fn validate_kvm_support() -> Result<(), KvmError>`:
      - Check if `/dev/kvm` exists: `std::path::Path::new("/dev/kvm").exists()`.
      - Check read and write access: `std::fs::OpenOptions::new().read(true).write(true).open("/dev/kvm")`.
      - Provide descriptive error variants: `KvmDeviceNotFound`, `KvmPermissionDenied` (instructing the user to add themselves to the `kvm` group).
@@ -521,7 +521,7 @@ For all 11 requirements evaluated as **Partial**, the following comprehensive an
 - **Phase & Domain:** Phase M2 (Execution Substrate / Docker-Free Sandboxing)
 - **Specification:** Base images must be kept read-only with ephemeral writable overlay (tmpfs/overlayfs) so guest writes do not mutate golden base images. (`requirements.md:155`)
 - **Current State:**
-  - In `/home/jeff/aura/aura-core/src/hypervisor/firecracker.rs:444`, `FirecrackerVm::configure_and_boot()` mounts the root drive via PUT `/drives/rootfs` with `"is_read_only": false`.
+  - In `/home/jeff/aura/aura/runtimes/microvm/src/firecracker.rs:444`, `FirecrackerVm::configure_and_boot()` mounts the root drive via PUT `/drives/rootfs` with `"is_read_only": false`.
   - While `/tmp` and `/run` use tmpfs inside the guest, mutations to root files persist to the host base ext4 image.
 - **Gap Analysis:**
   Because the root block device is attached with `"is_read_only": false`, any files created or modified by agent tasks outside `/tmp` (e.g. in `/root`, `/etc`, or `/usr`) permanently mutate the golden disk image on the host, violating zero-trust isolation and repeatability.
@@ -542,7 +542,7 @@ For all 11 requirements evaluated as **Partial**, the following comprehensive an
   The current implementation treats every bash invocation as an isolated one-shot execution. Multi-turn workflows requiring stateful shell sessions must re-execute setup commands on every turn.
 - **Actionable Next Steps:**
   1. Implement an in-guest persistent shell daemon (`bash-session-daemon`) inside `bash.ext4` listening on AF_VSOCK (similar to the existing `vsock-screenshot-daemon`).
-  2. Update `aura-core/src/hypervisor/firecracker.rs` to maintain an active vsock connection handle for the task session duration rather than immediately executing teardown.
+  2. Update `aura/runtimes/microvm/src/firecracker.rs` to maintain an active vsock connection handle for the task session duration rather than immediately executing teardown.
   3. In `aura-sdk/aura_sdk/tools/bash.py`, route consecutive bash commands under the same `task_id` to the active session until explicit task completion or 125s timeout triggers VM teardown.
 
 ---
@@ -551,12 +551,12 @@ For all 11 requirements evaluated as **Partial**, the following comprehensive an
 - **Phase & Domain:** Phase M2 (Sandboxed Tool Implementations)
 - **Specification:** Headless Chromium exposes Chrome DevTools Protocol (CDP) on port 9222 for remote navigation, DOM evaluation, and page scraping, controlled by `BrowserTool`. (`requirements.md:184`)
 - **Current State:**
-  - `deploy/images/build_browser_image.sh:196` pre-configures headless Chromium to launch with `--remote-debugging-port=9222`.
+  - `aura/runtimes/microvm/images/build_browser_image.sh:196` pre-configures headless Chromium to launch with `--remote-debugging-port=9222`.
   - `BrowserTool` is scaffolded in `aura-sdk/aura_sdk/tools/browser.py`, but host-to-guest port forwarding is not bridged to a live CDP client driver.
 - **Gap Analysis:**
   While Chromium runs and opens port 9222 inside the guest microVM, the host has no network forwarding bridge over AF_VSOCK to access guest port 9222, and the Python SDK lacks a driver to issue CDP commands.
 - **Actionable Next Steps:**
-  1. Add a vsock TCP proxy forwarder in `aura-core/src/hypervisor/firecracker.rs` that forwards guest TCP port 9222 to a host Unix domain socket or local loopback port.
+  1. Add a vsock TCP proxy forwarder in `aura/runtimes/microvm/src/firecracker.rs` that forwards guest TCP port 9222 to a host Unix domain socket or local loopback port.
   2. In `aura-sdk/aura_sdk/tools/browser.py`, connect an async CDP client (e.g. `chromiumoxide` or `playwright`) to the forwarded port.
   3. Expose standard browser automation actions (`navigate(url)`, `click(selector)`, `evaluate(script)`, `screenshot()`) returning structured responses to the agent.
 
@@ -566,13 +566,13 @@ For all 11 requirements evaluated as **Partial**, the following comprehensive an
 - **Phase & Domain:** Phase M3 (Cognitive Architectural Gaps & Upstream Mitigations)
 - **Specification:** Standard WASI 0.3 lacks standardized dynamic runtime hot-linking of newly generated WASM components without pre-composition or host restart. (`requirements.md:238`)
 - **Current State:**
-  - In `aura-core/src/hypervisor/wasm.rs:65-75, 92-117`, components are pre-compiled and statically linked using Wasmtime's Cranelift JIT with static WIT component interfaces (`aura:fs/read`, `aura:fs/write`).
+  - In `aura/runtimes/wasm/src/lib.rs:65-75, 92-117`, components are pre-compiled and statically linked using Wasmtime's Cranelift JIT with static WIT component interfaces (`aura:fs/read`, `aura:fs/write`).
   - Hot runtime dynamic composition is unstandardized upstream in the WASI Component Model.
 - **Gap Analysis:**
   This is an upstream specification limitation in WASI 0.3 / Wasmtime. Dynamic component composition currently requires deploy-time pre-composition rather than in-memory dynamic module linking.
 - **Actionable Next Steps:**
   1. Monitor upstream Bytecode Alliance progress on WASI Component Model 1.0 dynamic linking specifications.
-  2. Maintain the current architectural mitigation in `aura-core/src/hypervisor/wasm.rs`: utilize deploy-time static WIT component linking with pre-registered ABI imports.
+  2. Maintain the current architectural mitigation in `aura/runtimes/wasm/src/lib.rs`: utilize deploy-time static WIT component linking with pre-registered ABI imports.
   3. Architect a dynamic registry adapter once upstream Wasmtime stabilizes the dynamic component composition API.
 
 ---
