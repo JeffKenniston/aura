@@ -27,7 +27,7 @@ pub struct PricingConfig {
 
 impl PricingConfig {
     pub fn calculate_storage_cost_by_days(&self, bytes: u64, days: f64) -> f64 {
-        (bytes as f64) * self.storage_cost_per_byte * (days as f64)
+        (bytes as f64) * self.storage_cost_per_byte * days
     }
 
     pub fn calculate_token_cost(&self, input: u64, output: u64) -> f64 {
@@ -35,11 +35,21 @@ impl PricingConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RuntimeConfig {
     pub worker_threads: usize,
     pub max_blocking_threads: usize,
     pub thread_keep_alive_secs: u64,
+}
+
+impl Default for RuntimeConfig {
+    fn default() -> Self {
+        Self {
+            worker_threads: 0,
+            max_blocking_threads: 512,
+            thread_keep_alive_secs: 0,
+        }
+    }
 }
 
 impl RuntimeConfig {

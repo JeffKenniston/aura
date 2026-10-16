@@ -13,6 +13,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
+use std::sync::LazyLock;
 
 // ============================================================================
 // IAM-004 & IAM-005: Capability Scopes & Scoped SVID Enums
@@ -415,29 +416,36 @@ impl CapabilityEnforcer {
     }
 
     /// Evaluates Cedar policy for principal, action, and resource (IAM-005).
+    ///
+    /// **Performance Optimization:**
+    /// Caches the pre-compiled Cedar `PolicySet` using `std::sync::LazyLock`.
+    /// This eliminates the repetitive O(N) AST parsing overhead of compiling policies
+    /// from string definitions on every authorization request, significantly improving
+    /// validation latency and reducing CPU contention on worker threads.
     fn evaluate_cedar_policy(
         svid: &Svid,
         action_str: &str,
     ) -> Result<bool, Box<dyn std::error::Error>> {
-        let policy_source = r#"
-            permit(
-                principal,
-                action,
-                resource
-            ) when {
-                principal.is_trusted == true
-            };
-            
-            permit(
-                principal,
-                action,
-                resource
-            ) when {
-                principal.has_scope == true
-            };
-        "#;
+        static CEDAR_POLICY_SET: LazyLock<PolicySet> = LazyLock::new(|| {
+            let policy_source = r#"
+                permit(
+                    principal,
+                    action,
+                    resource
+                ) when {
+                    principal.is_trusted == true
+                };
 
-        let policies = PolicySet::from_str(policy_source)?;
+                permit(
+                    principal,
+                    action,
+                    resource
+                ) when {
+                    principal.has_scope == true
+                };
+            "#;
+            PolicySet::from_str(policy_source).expect("Failed to parse static Cedar policy set")
+        });
 
         let principal_uid = EntityUid::from_type_name_and_id(
             EntityTypeName::from_str("Agent")?,
@@ -480,7 +488,7 @@ impl CapabilityEnforcer {
         let entities = Entities::from_json_str(&entities_json, None)?;
 
         let authorizer = Authorizer::new();
-        let answer = authorizer.is_authorized(&req, &policies, &entities);
+        let answer = authorizer.is_authorized(&req, &CEDAR_POLICY_SET, &entities);
 
         Ok(answer.decision() == Decision::Allow)
     }
