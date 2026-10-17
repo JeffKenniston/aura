@@ -415,29 +415,36 @@ impl CapabilityEnforcer {
     }
 
     /// Evaluates Cedar policy for principal, action, and resource (IAM-005).
+    ///
+    /// **Performance Optimization:** Uses `std::sync::LazyLock` to cache the pre-compiled `PolicySet`.
+    /// This evaluates the policy string exactly once, preventing repetitive O(N) AST parsing
+    /// overhead on every authorization check and reducing latency.
     fn evaluate_cedar_policy(
         svid: &Svid,
         action_str: &str,
     ) -> Result<bool, Box<dyn std::error::Error>> {
-        let policy_source = r#"
-            permit(
-                principal,
-                action,
-                resource
-            ) when {
-                principal.is_trusted == true
-            };
-            
-            permit(
-                principal,
-                action,
-                resource
-            ) when {
-                principal.has_scope == true
-            };
-        "#;
+        static POLICIES: std::sync::LazyLock<PolicySet> = std::sync::LazyLock::new(|| {
+            let policy_source = r#"
+                permit(
+                    principal,
+                    action,
+                    resource
+                ) when {
+                    principal.is_trusted == true
+                };
 
-        let policies = PolicySet::from_str(policy_source)?;
+                permit(
+                    principal,
+                    action,
+                    resource
+                ) when {
+                    principal.has_scope == true
+                };
+            "#;
+            PolicySet::from_str(policy_source).expect("Failed to parse static Cedar policy source")
+        });
+
+        let policies = &*POLICIES;
 
         let principal_uid = EntityUid::from_type_name_and_id(
             EntityTypeName::from_str("Agent")?,
@@ -480,7 +487,7 @@ impl CapabilityEnforcer {
         let entities = Entities::from_json_str(&entities_json, None)?;
 
         let authorizer = Authorizer::new();
-        let answer = authorizer.is_authorized(&req, &policies, &entities);
+        let answer = authorizer.is_authorized(&req, policies, &entities);
 
         Ok(answer.decision() == Decision::Allow)
     }
